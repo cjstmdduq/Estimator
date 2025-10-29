@@ -33,6 +33,7 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #475569; }
+.space-name { margin-bottom: 12px; }
 input, select, button { font: inherit; }
 input, select { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; color: #0f172a; background: #fff; }
 input:focus, select:focus { outline: 2px solid #93c5fd; border-color: #60a5fa; }
@@ -80,12 +81,45 @@ button {
   margin-top: 15px;
 }
 
-.copy-button-container {
-  margin-top: 20px;
+.action-buttons {
+  margin-top: 24px;
+  display: flex;
+  gap: 10px;
 }
 
-.copy-button-container button {
-  width: 100%;
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 15px;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.primary-btn {
+  background: #2563eb;
+  color: #fff;
+}
+
+.primary-btn:hover {
+  background: #1d4ed8;
+}
+
+.secondary-btn {
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #cbd5e1;
+}
+
+.secondary-btn:hover {
+  background: #eef2ff;
 }
 
 .result { display: grid; gap: 6px; font-size: 14px; }
@@ -102,33 +136,57 @@ button {
 /* 제품 탭 */
 .product-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 16px;
+  justify-content: center;
 }
 
-.tab-btn {
+.product-tab-item {
   flex: 1;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.product-tab-btn {
+  width: 100%;
+  aspect-ratio: 1 / 1;
   background: #f8fafc;
-  color: #475569;
-  border: 1px solid #e2e8f0;
-  padding: 10px 16px;
-  border-radius: 999px;
+  border: 3px solid #e2e8f0;
+  border-radius: 12px;
   cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+  overflow: hidden;
+}
+
+.product-tab-image {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
   transition: all 0.2s;
 }
 
-.tab-btn.active {
-  background: #2563eb;
-  color: white;
+.product-tab-btn.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.product-tab-btn:hover {
+  border-color: #cbd5e1;
+}
+
+.product-tab-btn.active:hover {
   border-color: #2563eb;
 }
 
-.tab-btn:not(:disabled):hover {
-  background: #edf2ff;
-}
-
-.tab-btn.active:hover {
-  background: #1e3fa7;
+.product-tab-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+  text-align: center;
 }
 
 /* 두께 선택 탭 */
@@ -160,6 +218,39 @@ button {
 }
 
 .thickness-btn.active:hover {
+  background: #1e3fa7;
+}
+
+/* 계산 방식 탭 */
+.calc-mode-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.calc-mode-btn {
+  flex: 1;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.calc-mode-btn.active {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.calc-mode-btn:hover {
+  background: #e5edff;
+}
+
+.calc-mode-btn.active:hover {
   background: #1e3fa7;
 }
 

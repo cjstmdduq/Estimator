@@ -18,22 +18,23 @@
       <section class="card">
         <h2>제품 선택</h2>
         <div class="product-tabs">
-          <button class="tab-btn active" data-product="puzzle">퍼즐매트</button>
-          <button class="tab-btn" data-product="babyRoll">유아 롤매트</button>
-          <button class="tab-btn" data-product="petRoll">애견 롤매트</button>
-        </div>
-
-        <div class="product-display">
-          <a href="#" id="product-link" target="_blank" class="product-image-link">
-            <div class="product-image-wrapper">
-              <img id="product-image" src="./images/puzzle-mat-placeholder.svg" alt="제품 이미지" class="product-image" />
-            </div>
-          </a>
-          <div class="product-info">
-            <div id="product-description" class="muted small">두께 선택: 25T / 25T Plus+ / 40T</div>
-            <div class="muted small" style="margin-top: 8px;">
-              <span id="product-link-text">제품 상세보기</span>
-            </div>
+          <div class="product-tab-item">
+            <button class="product-tab-btn active" data-product="puzzle">
+              <div class="product-tab-image" style="background-image: url('./images/product_03.jpg')"></div>
+            </button>
+            <span class="product-tab-label">퍼즐매트</span>
+          </div>
+          <div class="product-tab-item">
+            <button class="product-tab-btn" data-product="babyRoll">
+              <div class="product-tab-image" style="background-image: url('./images/product_01.jpg')"></div>
+            </button>
+            <span class="product-tab-label">유아 롤매트</span>
+          </div>
+          <div class="product-tab-item">
+            <button class="product-tab-btn" data-product="petRoll">
+              <div class="product-tab-image" style="background-image: url('./images/product_02.jpg')"></div>
+            </button>
+            <span class="product-tab-label">애견 롤매트</span>
           </div>
         </div>
       </section>
@@ -43,29 +44,15 @@
         <div id="thickness-selector" class="thickness-tabs">
           <!-- 동적으로 생성됨 -->
         </div>
-        <div id="thickness-price-info" class="muted small" style="margin-top: 10px;">
-          <!-- 가격 정보 표시 -->
-        </div>
       </section>
 
       <section class="card">
-        <h2>계산 방식 선택</h2>
-        <div style="margin-bottom: 20px;">
-          <label style="display: block; margin-bottom: 10px;">
-            <input type="radio" name="calc-mode" value="loose" checked style="margin-right: 8px;">
-            <strong>여유있게 깔기 (권장)</strong>
-            <div style="margin-left: 28px; color: #666; font-size: 0.9em;">
-              타일 단위로만 구매하여 공간보다 작게 깔립니다. 재단이 필요없으며, 가장자리에 여백이 생길 수 있습니다.
-            </div>
-          </label>
-          <label style="display: block;">
-            <input type="radio" name="calc-mode" value="exact" style="margin-right: 8px;">
-            <strong>정확히 맞추기</strong>
-            <div style="margin-left: 28px; color: #666; font-size: 0.9em;">
-              공간 크기에 딱 맞게 매트를 구매합니다. 재단이 필요할 수 있으며, 약간의 여유분이 포함됩니다.
-            </div>
-          </label>
+        <h2>계산 방식</h2>
+        <div class="calc-mode-tabs">
+          <button class="calc-mode-btn active" data-mode="loose">여유있게 깔기 (권장)</button>
+          <button class="calc-mode-btn" data-mode="exact">정확히 맞추기</button>
         </div>
+        <input type="hidden" name="calc-mode" id="calc-mode-value" value="loose">
       </section>
 
       <section class="card">
@@ -75,30 +62,44 @@
 
         <div class="button-group">
           <button id="add-space" class="secondary">+ 공간 추가</button>
-          <button id="calc" class="primary">전체 계산</button>
         </div>
       </section>
 
       <section class="card">
         <h2>견적 결과</h2>
-        <div id="results"></div>
 
-        <div class="total-section">
-          <h3>전체 합계</h3>
-          <div class="result">
-            <div>총 공간 수: <strong id="total-spaces">-</strong></div>
-            <div>총 장수: <strong id="total-pcs">-</strong></div>
-            <div>재단/여유 안내: <strong id="total-waste">-</strong></div>
-            <div class="price-highlight">총 예상가: <strong id="total-price">-</strong></div>
-          </div>
+        <div class="result">
+          <div style="margin-bottom: 12px;"><strong>총 구성</strong></div>
+          <div id="total-composition" style="margin-left: 20px; margin-bottom: 12px;">-</div>
+          <div style="margin-top: 16px;"><strong>총 장수</strong></div>
+          <div style="margin-left: 20px;"><strong id="total-pcs">-</strong></div>
+          <div class="price-highlight" style="margin-top: 16px;"><strong>총 가격 <span class="muted small">(할인 미적용가)</span></strong></div>
+          <div class="price-highlight" style="margin-left: 20px;"><strong id="total-price">-</strong></div>
         </div>
 
-        <div class="copy-button-container">
-          <button id="copy-estimate" class="secondary">견적서 복사</button>
+        <div class="action-buttons">
+          <button id="copy-estimate" class="action-btn secondary-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            견적서 복사
+          </button>
+          <a id="purchase-link" href="#" target="_blank" class="action-btn primary-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="9" cy="21" r="1"></circle>
+              <circle cx="20" cy="21" r="1"></circle>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+            </svg>
+            제품 구매하기
+          </a>
         </div>
       </section>
 
-      <footer class="muted small">매트견적 계산기 · cjstmdduq(천승엽) 개발</footer>
+      <footer class="muted small" style="text-align: center; padding: 20px 0; line-height: 1.6;">
+        <strong style="color: #475569;">따사룸 (주)대승아이앤피</strong> 공식 견적 계산기<br>
+        개발 관리: 천승엽 팀장 | 무단 복제 및 도용 시 법적 조치 가능
+      </footer>
     </main>
 
     <script src="./app.js"></script>
