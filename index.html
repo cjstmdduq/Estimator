@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>따사룸 매트견적 계산기</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='8' y='6' width='48' height='52' rx='8' ry='8' fill='%232563eb'/%3E%3Crect x='14' y='12' width='36' height='10' rx='3' fill='%23ffffff' opacity='0.9'/%3E%3Crect x='18' y='28' width='10' height='10' rx='2' fill='%23ffffff'/%3E%3Crect x='36' y='28' width='10' height='10' rx='2' fill='%23ffffff'/%3E%3Crect x='18' y='42' width='10' height='10' rx='2' fill='%23ffffff'/%3E%3Crect x='36' y='42' width='10' height='10' rx='2' fill='%23ffffff'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>따사룸 매트견적 계산기</h1>
+
+      <section class="card">
+        <h2>제품 선택</h2>
+        <div class="product-tabs">
+          <button class="tab-btn active" data-product="puzzle">퍼즐매트</button>
+          <button class="tab-btn" data-product="babyRoll">유아 롤매트</button>
+          <button class="tab-btn" data-product="petRoll">애견 롤매트</button>
+        </div>
+
+        <div class="product-display">
+          <a href="#" id="product-link" target="_blank" class="product-image-link">
+            <div class="product-image-wrapper">
+              <img id="product-image" src="./images/puzzle-mat-placeholder.svg" alt="제품 이미지" class="product-image" />
+            </div>
+          </a>
+          <div class="product-info">
+            <div id="product-description" class="muted small">두께 선택: 25T / 25T Plus+ / 40T</div>
+            <div class="muted small" style="margin-top: 8px;">
+              <span id="product-link-text">제품 상세보기</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>두께 선택</h2>
+        <div id="thickness-selector" class="thickness-tabs">
+          <!-- 동적으로 생성됨 -->
+        </div>
+        <div id="thickness-price-info" class="muted small" style="margin-top: 10px;">
+          <!-- 가격 정보 표시 -->
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>계산 방식 선택</h2>
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 10px;">
+            <input type="radio" name="calc-mode" value="loose" checked style="margin-right: 8px;">
+            <strong>여유있게 깔기 (권장)</strong>
+            <div style="margin-left: 28px; color: #666; font-size: 0.9em;">
+              타일 단위로만 구매하여 공간보다 작게 깔립니다. 재단이 필요없으며, 가장자리에 여백이 생길 수 있습니다.
+            </div>
+          </label>
+          <label style="display: block;">
+            <input type="radio" name="calc-mode" value="exact" style="margin-right: 8px;">
+            <strong>정확히 맞추기</strong>
+            <div style="margin-left: 28px; color: #666; font-size: 0.9em;">
+              공간 크기에 딱 맞게 매트를 구매합니다. 재단이 필요할 수 있으며, 약간의 여유분이 포함됩니다.
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>공간 입력</h2>
+
+        <div id="spaces-container"></div>
+
+        <div class="button-group">
+          <button id="add-space" class="secondary">+ 공간 추가</button>
+          <button id="calc" class="primary">전체 계산</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>견적 결과</h2>
+        <div id="results"></div>
+
+        <div class="total-section">
+          <h3>전체 합계</h3>
+          <div class="result">
+            <div>총 공간 수: <strong id="total-spaces">-</strong></div>
+            <div>총 장수: <strong id="total-pcs">-</strong></div>
+            <div>재단/여유 안내: <strong id="total-waste">-</strong></div>
+            <div class="price-highlight">총 예상가: <strong id="total-price">-</strong></div>
+          </div>
+        </div>
+
+        <div class="copy-button-container">
+          <button id="copy-estimate" class="secondary">견적서 복사</button>
+        </div>
+      </section>
+
+      <footer class="muted small">매트견적 계산기 · 정적 페이지</footer>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+  </html>
