@@ -65,7 +65,7 @@
       image: './images/roll-mat-placeholder.svg',
       imageReal: './images/product_02.jpg',
       description: '두께 선택: 6T / 9T / 12T',
-      link: 'https://brand.naver.com/ddasaroom/products/6092903705'
+      link: 'https://brand.naver.com/ddasaroom/products/4200445704'
     }
   };
 
