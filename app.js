@@ -67,6 +67,8 @@
   const SHORTAGE_FORCE_ALT_CM = 20;
   // 대체 조합 탐색 시 허용할 최대 과충족(cm)
   const EXTENDED_EXACT_OVERAGE_CAP_CM = 80;
+  // 길이 방향 여유/부족 허용 임계치(cm)
+  const LENGTH_RELAXATION_THRESHOLD_CM = 10;
 
   let spaceCounter = 0;
   const spaces = [];
@@ -565,10 +567,19 @@
     const maxLength = ROLL_MAX_LENGTH[thickness] || Infinity;
     
     let calculatedLength;
-    if (mode === 'exact') {
-      calculatedLength = ceilDiv(targetLength, 50) * 50;
-    } else {
-      calculatedLength = ceilDiv(targetLength, 50) * 50;  // 길이는 항상 올림
+    const lengthCeil = ceilDiv(targetLength, 50) * 50;
+    const lengthFloor = Math.floor(targetLength / 50) * 50;
+    calculatedLength = lengthCeil;
+
+    // 길이 방향도 10cm 이하 여유면 더 짧은 길이 추천
+    const ceilOverage = lengthCeil - targetLength;
+    const floorShortage = targetLength - lengthFloor;
+    if (lengthFloor > 0 && floorShortage > 0 && floorShortage <= LENGTH_RELAXATION_THRESHOLD_CM) {
+      calculatedLength = lengthFloor;
+    }
+
+    if (calculatedLength <= 0) {
+      calculatedLength = 50;
     }
     
     // 최대 길이 초과 시 균등 분할
