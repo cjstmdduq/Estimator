@@ -3,11 +3,13 @@
 
   const $addSpace = document.getElementById('add-space');
   const $copyEstimate = document.getElementById('copy-estimate');
+  const $copyShippingMemo = document.getElementById('copy-shipping-memo');
   const $purchaseLink = document.getElementById('purchase-link');
   const $spacesContainer = document.getElementById('spaces-container');
   const $totalPcs = document.getElementById('total-pcs');
   const $totalPrice = document.getElementById('total-price');
   const $totalComposition = document.getElementById('total-composition');
+  const $calcModeSection = document.querySelector('.calc-mode-card') || document.querySelector('[data-calc-mode-section]');
 
   // 퍼즐매트 가격 정보 (100×100cm 1pcs 기준)
   const PUZZLE_PRICES = {
@@ -33,6 +35,16 @@
     120: 3,  // 낮은 우선순위
     125: 2,  // 중간 우선순위
     140: 1   // 높은 우선순위
+  };
+
+  // 롤매트 두께별 최대 길이 (cm)
+  const ROLL_MAX_LENGTH = {
+    6: 1300,   // 13m
+    9: 1200,   // 12m
+    12: 1200,  // 12m
+    14: 1000,  // 10m
+    17: 800,   // 8m
+    22: 600    // 6m
   };
 
   let spaceCounter = 0;
@@ -134,6 +146,24 @@
 
     // 두께 선택 UI 업데이트
     updateThicknessSelector();
+
+    // 계산 방식 섹션 표시 여부 업데이트
+    if ($calcModeSection) {
+      if (productType === 'puzzle') {
+        $calcModeSection.style.display = 'block';
+      } else {
+        $calcModeSection.style.display = 'none';
+      }
+    }
+
+    // 배송메모 복사 버튼 표시 여부 업데이트 (애견 롤매트만 표시)
+    if ($copyShippingMemo) {
+      if (productType === 'petRoll') {
+        $copyShippingMemo.style.display = 'block';
+      } else {
+        $copyShippingMemo.style.display = 'none';
+      }
+    }
 
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
@@ -442,53 +472,83 @@
       }
     }
 
-    // 2. 최적 폭 조합 찾기
-    const solutions = findBestRollWidthCombination(targetWidth, mode);
+    // 2. 최적 폭 조합 찾기 (폭은 "여유있게" - 공간보다 작거나 같게)
+    const solutions = findBestRollWidthCombination(targetWidth, 'loose');
 
     if (!solutions || solutions.length === 0) {
       return null;
     }
 
-    // 3. 길이 계산 (50cm 단위)
+    // 3. 길이 계산 (50cm 단위, 최대 길이 제한 적용)
+    const thickness = parseInt(currentThickness);
+    const maxLength = ROLL_MAX_LENGTH[thickness] || Infinity;
+    
     let calculatedLength;
     if (mode === 'exact') {
       calculatedLength = ceilDiv(targetLength, 50) * 50;
     } else {
-      calculatedLength = floorDiv(targetLength, 50) * 50;
+      calculatedLength = ceilDiv(targetLength, 50) * 50;  // 길이는 항상 올림
+    }
+    
+    // 최대 길이 초과 시 균등 분할
+    let rollLength, splitCount;
+    if (calculatedLength <= maxLength) {
+      // 한 롤로 가능
+      rollLength = calculatedLength;
+      splitCount = 1;
+    } else {
+      // 균등 분할 (가장 적은 분할로)
+      const fullRolls = Math.ceil(calculatedLength / maxLength);
+      rollLength = Math.ceil(calculatedLength / fullRolls / 50) * 50;  // 50cm 단위로 올림
+      splitCount = fullRolls;
     }
 
     // 4. 가격 계산 (두께별 가격 적용)
-    const thickness = parseInt(currentThickness);
-    const lengthIn50cm = calculatedLength / 50;  // 50cm 단위 개수
+    const lengthIn50cm = rollLength / 50;  // 50cm 단위 개수
     let totalPrice = 0;
     let breakdown = [];
 
     solutions.forEach(sol => {
       const pricePerUnit = ROLL_PRICES[thickness][sol.width];  // 50cm 당 가격
-      const price = pricePerUnit * lengthIn50cm * sol.count;
+      const price = pricePerUnit * lengthIn50cm * sol.count * splitCount;
       totalPrice += price;
-      breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${calculatedLength}cm 길이 × ${sol.count}개`);
+      
+      if (isPet) {
+        // 애견 롤매트: 폭별 정보와 구매 단위를 한 줄에 표시
+        const units = lengthIn50cm * sol.count * splitCount;
+        const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
+        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText} (50cm ${units}개 구매)`);
+      } else {
+        const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
+        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText}`);
+      }
     });
 
     // 5. 낭비율 계산
     const actualArea = width * height;
     const usedWidth = solutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
-    const usedArea = usedWidth * calculatedLength;
+    const totalUsedLength = rollLength * splitCount;
+    const usedArea = usedWidth * totalUsedLength;
     const wastePercent = actualArea > 0 ? Math.round(((usedArea - actualArea) / usedArea) * 100) : 0;
-    const coverageWidth = widthAxis === 'width' ? usedWidth : calculatedLength;
-    const coverageHeight = widthAxis === 'width' ? calculatedLength : usedWidth;
-    const rollCount = solutions.reduce((sum, sol) => sum + sol.count, 0);
-    const totalRollUnits = lengthIn50cm * rollCount;
-    const lengthText = formatLength(calculatedLength);
-    const cutGuideList = solutions.map(sol => `${lengthText} ${sol.count}롤`);
-    const cutGuide = cutGuideList.join(', ');
-    const rollPurchaseMessage = (isPet && lengthIn50cm > 0) ? `50cm ${totalRollUnits}개 구매` : '';
-    const rollCutMessage = (isPet && cutGuide) ? `${cutGuide}로 재단` : '';
+    const coverageWidth = widthAxis === 'width' ? usedWidth : totalUsedLength;
+    const coverageHeight = widthAxis === 'width' ? totalUsedLength : usedWidth;
+    const totalRolls = solutions.reduce((sum, sol) => sum + sol.count, 0) * splitCount;
+    const totalRollUnits = lengthIn50cm * totalRolls;
+    const lengthText = formatLength(rollLength);
+    
     let shippingMemo = '';
     if (isPet) {
-      shippingMemo = cutGuide ? `배송메모 : ${cutGuide}로 재단` : '배송메모 : 없음';
-      if (rollPurchaseMessage) breakdown.push(rollPurchaseMessage);
-      if (rollCutMessage) breakdown.push(rollCutMessage);
+      // 애견 롤매트 배송메모: 폭별로 재단 요청 명기
+      if (solutions.length > 0) {
+        const cutRequestList = solutions.map(sol => {
+          const meters = formatLength(rollLength);
+          const totalRolls = sol.count * splitCount;
+          const rollText = splitCount > 1 ? `${totalRolls}롤` : `${sol.count}롤`;
+          return `${sol.width}cm 폭 ${meters} ${rollText}`;
+        });
+        shippingMemo = `배송메모(재단요청): ${cutRequestList.join(', ')}으로 재단`;
+        breakdown.push(shippingMemo);
+      }
     }
 
     const rollLabel = isPet ? '애견 롤매트' : '유아 롤매트';
@@ -498,6 +558,8 @@
       targetWidth,
       targetLength,
       calculatedLength,
+      rollLength,
+      splitCount,
       solutions,
       totalPrice,
       price: totalPrice,
@@ -506,11 +568,9 @@
       coverageWidth,
       coverageHeight,
       fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight),
-      pcs: rollCount,
-      rollCount,
+      pcs: totalRolls,
+      rollCount: totalRolls,
       totalRollUnits,
-      rollPurchaseMessage,
-      rollCutMessage,
       shippingMemo
     };
   }
@@ -856,17 +916,30 @@
     if (activeSpaces > 0) {
       spaceResults.forEach((r, idx) => {
         const spaceName = r.name || `공간 ${idx + 1}`;
-        totalCompositionHTML += `<div style="margin-bottom: 8px;">
+        totalCompositionHTML += `<div style="margin-bottom: 12px;">
           <strong>${spaceName}</strong>
           <span class="muted small">(${r.width}cm × ${r.height}cm)</span>
         </div>`;
         if (r.breakdown && r.breakdown.length > 0) {
-          r.breakdown.forEach(line => {
-            totalCompositionHTML += `<div style="margin-left: 15px;">${line}</div>`;
+          r.breakdown.forEach((line, lineIdx) => {
+            // 배송메모는 구분선으로 분리
+            if (line.includes('배송메모')) {
+              totalCompositionHTML += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;"></div>`;
+              totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 8px; font-weight: 500;">${line}</div>`;
+            } else {
+              totalCompositionHTML += `<div style="margin-left: 15px; margin-bottom: ${lineIdx < r.breakdown.length - 1 ? '6px' : '0'};}">${line}</div>`;
+            }
+          });
+        }
+        // 재단/여유 안내 메시지 표시 (작은 글씨)
+        if (r.fitMessages && r.fitMessages.length > 0) {
+          totalCompositionHTML += `<div style="margin-top: 10px;"></div>`;
+          r.fitMessages.forEach(msg => {
+            totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
           });
         }
         if (idx < spaceResults.length - 1) {
-          totalCompositionHTML += `<div style="margin: 10px 0; border-top: 1px solid #e0e0e0;"></div>`;
+          totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
       });
     } else {
@@ -881,7 +954,9 @@
         if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
         if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
         totalPcsText = parts.join(' / ');
-      } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      } else if (currentProduct === 'babyRoll') {
+        totalPcsText = totalRolls > 0 ? `${totalRolls}롤` : '0롤';
+      } else if (currentProduct === 'petRoll') {
         totalPcsText = totalRolls > 0 ?
           `${totalRolls}롤 (50cm ${totalRollUnits}개)` :
           '0롤';
@@ -911,22 +986,40 @@
     const calcModeText = calcMode === 'exact' ? '정확히 맞추기' : '여유있게 깔기';
     const productInfo = PRODUCTS[currentProduct];
 
-    let text = '======================\n';
-    text += '견적 결과\n';
-    text += '======================\n\n';
+    let text = '견적 결과\n\n';
 
     text += '[ 제품 정보 ]\n';
     text += `제품: ${productInfo.name} - ${getThicknessLabel()}\n`;
-    text += `계산방식: ${calcModeText}\n\n`;
+    // 퍼즐매트만 계산방식 표시
+    if (currentProduct === 'puzzle') {
+      text += `계산방식: ${calcModeText}\n`;
+    }
+    text += '\n';
 
     text += '[ 총 구성 ]\n';
     spaceResults.forEach((r, idx) => {
       const spaceName = r.name || `공간 ${idx + 1}`;
       text += `\n${spaceName} (${r.width}cm × ${r.height}cm)\n`;
       if (r.breakdown && r.breakdown.length > 0) {
-        r.breakdown.forEach(line => {
-          text += `  ${line}\n`;
+        r.breakdown.forEach((line, lineIdx) => {
+          // 배송메모는 구분선으로 분리
+          if (line.includes('배송메모')) {
+            text += '\n';
+            text += `${line}\n`;
+          } else {
+            text += `  ${line}\n`;
+          }
         });
+      }
+      // 재단/여유 안내 메시지
+      if (r.fitMessages && r.fitMessages.length > 0) {
+        r.fitMessages.forEach(msg => {
+          text += `  ${msg}\n`;
+        });
+      }
+      // 공간 간 구분
+      if (idx < spaceResults.length - 1) {
+        text += '\n────────────────────\n';
       }
     });
 
@@ -936,14 +1029,14 @@
       if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
       if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
       text += `${parts.join(' / ')}\n`;
-    } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+    } else if (currentProduct === 'babyRoll') {
+      text += `${totalRolls}롤\n`;
+    } else if (currentProduct === 'petRoll') {
       text += `${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
     }
 
     text += '\n[ 총 가격 (할인 미적용가) ]\n';
-    text += `${KRW.format(totalPrice)}\n`;
-
-    text += '\n======================\n';
+    text += `${KRW.format(totalPrice)}`;
 
     return text;
   }
@@ -993,6 +1086,66 @@
     });
   }
 
+  // 배송메모 복사 함수
+  function copyShippingMemo() {
+    if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
+      alert('배송메모가 없습니다. 먼저 계산을 실행해주세요.');
+      return;
+    }
+
+    const { spaceResults, shippingMemos } = lastCalculationResults;
+
+    if (!shippingMemos || shippingMemos.length === 0) {
+      alert('배송메모가 없습니다.');
+      return;
+    }
+
+    // 배송메모 텍스트 생성 (공간별로 구분)
+    let memoText = '';
+    spaceResults.forEach((r, idx) => {
+      if (r.shippingMemo && r.shippingMemo !== '배송메모 : 없음') {
+        const spaceName = r.name || `공간 ${idx + 1}`;
+        memoText += `${spaceName}\n`;
+        memoText += `${r.shippingMemo}\n`;
+        if (idx < spaceResults.length - 1) memoText += '\n';
+      }
+    });
+
+    if (!memoText) {
+      alert('배송메모가 없습니다.');
+      return;
+    }
+
+    // 클립보드에 복사
+    navigator.clipboard.writeText(memoText).then(() => {
+      // 성공 메시지
+      $copyShippingMemo.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        복사 완료!
+      `;
+      $copyShippingMemo.style.background = '#10b981';
+      $copyShippingMemo.style.borderColor = '#10b981';
+      $copyShippingMemo.style.color = '#fff';
+
+      setTimeout(() => {
+        $copyShippingMemo.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          배송메모 복사
+        `;
+        $copyShippingMemo.style.background = '';
+        $copyShippingMemo.style.borderColor = '';
+        $copyShippingMemo.style.color = '';
+      }, 2000);
+    }).catch(err => {
+      alert('복사에 실패했습니다: ' + err);
+    });
+  }
+
   // 계산 방식 탭 초기화
   function initCalcModeTabs() {
     const calcModeBtns = document.querySelectorAll('.calc-mode-btn');
@@ -1020,6 +1173,7 @@
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);
   $copyEstimate.addEventListener('click', copyEstimate);
+  $copyShippingMemo.addEventListener('click', copyShippingMemo);
 
   // 제품 탭 초기화
   initProductTabs();
