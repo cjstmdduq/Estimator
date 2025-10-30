@@ -47,6 +47,27 @@
     22: 600    // 6m
   };
 
+  // 보완 옵션 임계치(부족폭 cm 이상이면 추가 롤 제안)
+  const COMPLEMENT_GAP_THRESHOLD_CM = 15;
+  // 보완 시 선호 폭 순서 (사용 가능 폭과 교집합 적용)
+  const PREFERRED_COMPLEMENT_WIDTHS = [110, 125, 140, 70];
+
+  // 고객 선호 폭 선택 규칙 (폭 기준, cm)
+  const PREFERRED_WIDTH_RULES = [
+    { min: 150, max: 170, prefer: [{ width: 110, count: 2, mode: 'exact' }] },
+    { min: 180, max: 190, prefer: [{ width: 110, count: 2, mode: 'exact' }] }
+  ];
+
+  // 여유 해의 부족폭이 이 값 이상이면 정확(재단) 해를 기본 선택으로 전환
+  const SHORTAGE_SWITCH_CM = 10;
+
+  // 정확(≥) 조합에서 허용하는 최대 과충족(cm)
+  const EXACT_OVERAGE_CAP_CM = 20;
+  // 여유 조합 부족폭이 클 때 대체 조합 탐색 기준(cm)
+  const SHORTAGE_FORCE_ALT_CM = 20;
+  // 대체 조합 탐색 시 허용할 최대 과충족(cm)
+  const EXTENDED_EXACT_OVERAGE_CAP_CM = 80;
+
   let spaceCounter = 0;
   const spaces = [];
   let lastCalculationResults = [];  // 마지막 계산 결과 저장
@@ -472,11 +493,71 @@
       }
     }
 
-    // 2. 최적 폭 조합 찾기 (폭은 "여유있게" - 공간보다 작거나 같게)
-    const solutions = findBestRollWidthCombination(targetWidth, 'loose');
+    // 2. 최적 폭 조합 찾기: 기본은 여유(≤), 대안으로 정확(≥)도 함께 계산
+    const looseSolutions = findBestRollWidthCombination(targetWidth, 'loose');
+    const exactSolutions = findBestRollWidthCombination(targetWidth, 'exact');
+
+    // 2-A. 고객 선호 규칙 적용: 해당 구간이면 우선 사용
+    function matchPreferredRule(targetWidth, loose, exact) {
+      if (!PREFERRED_WIDTH_RULES || PREFERRED_WIDTH_RULES.length === 0) return null;
+      const rule = PREFERRED_WIDTH_RULES.find(r => targetWidth >= r.min && targetWidth <= r.max);
+      if (!rule) return null;
+      // 현재 구현에서는 첫 선호안만 검사
+      const pref = rule.prefer[0];
+      if (!pref) return null;
+      const isLoose = pref.mode === 'loose';
+      const candidate = isLoose ? loose : exact;
+      if (!candidate) return null;
+      if (candidate.length !== 1) return null;
+      const only = candidate[0];
+      if (only.width === pref.width && only.count === pref.count) {
+        return candidate;
+      }
+      return null;
+    }
+
+    // 2-B. "남는공간 10cm 이하이면 작은 조합 선호" 규칙 (여유 해 존재 시 우선 적용)
+    function preferSmallIfTinyGap(targetWidth, loose) {
+      if (!loose) return null;
+      const looseUsed = loose.reduce((s, x) => s + x.width * x.count, 0);
+      const gap = targetWidth - looseUsed; // >0이면 부족
+      if (gap > 0 && gap <= 10) return loose;
+      return null;
+    }
+
+    // 2-C. 부족폭이 큰 경우(≥ SHORTAGE_SWITCH_CM) 정확 해로 전환
+    function switchToExactIfLargeShortage(targetWidth, loose, exact) {
+      if (!loose || !exact) return null;
+      const looseUsed = loose.reduce((s, x) => s + x.width * x.count, 0);
+      const gap = targetWidth - looseUsed; // >0이면 부족
+      if (gap >= SHORTAGE_SWITCH_CM) return exact;
+      return null;
+    }
+
+    let solutions = preferSmallIfTinyGap(targetWidth, looseSolutions)
+      || matchPreferredRule(targetWidth, looseSolutions, exactSolutions)
+      || switchToExactIfLargeShortage(targetWidth, looseSolutions, exactSolutions)
+      || looseSolutions
+      || exactSolutions;
 
     if (!solutions || solutions.length === 0) {
       return null;
+    }
+
+    // 여유 조합에서 부족폭이 크게 남을 경우 확장 정확 조합으로 전환 시도
+    if (solutions === looseSolutions && looseSolutions) {
+      const looseUsedWidth = looseSolutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
+      const looseGap = targetWidth - looseUsedWidth;
+      if (looseGap >= SHORTAGE_FORCE_ALT_CM) {
+        const extendedExactSolutions = findBestRollWidthCombination(
+          targetWidth,
+          'exact',
+          { exactOverageCap: EXTENDED_EXACT_OVERAGE_CAP_CM }
+        );
+        if (extendedExactSolutions) {
+          solutions = extendedExactSolutions;
+        }
+      }
     }
 
     // 3. 길이 계산 (50cm 단위, 최대 길이 제한 적용)
@@ -553,6 +634,35 @@
 
     const rollLabel = isPet ? '애견 롤매트' : '유아 롤매트';
 
+    // 6-A. 대안 옵션 표시: 선택되지 않은 다른 모드 해를 함께 제안
+    const alternativeLines = [];
+    const otherSolutions = (solutions === exactSolutions) ? looseSolutions : exactSolutions;
+    if (otherSolutions) {
+      let altPrice = 0;
+      otherSolutions.forEach(sol => {
+        const pricePerUnit = ROLL_PRICES[thickness][sol.width];
+        const price = pricePerUnit * lengthIn50cm * sol.count * splitCount;
+        altPrice += price;
+      });
+
+      const otherUsedWidth = otherSolutions.reduce((s, x) => s + x.width * x.count, 0);
+      const overWidth = Math.max(0, otherUsedWidth - targetWidth);
+      const rollText = splitCount > 1 ? `${splitCount}롤` : `${otherSolutions.reduce((s, x) => s + x.count, 0)}개`;
+
+      // 구성 문자열 생성
+      const comboText = otherSolutions.map(sol => `${sol.width}cm 폭 × ${rollLength}cm 길이 × ${splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`}`).join(' + ');
+      const diff = altPrice - totalPrice;
+      const priceDiffText = diff === 0 ? '' : (diff > 0 ? ` (+${KRW.format(diff)})` : ` (${KRW.format(diff)})`);
+
+      alternativeLines.push(`대안 옵션(고객 선호): ${getThicknessLabel()} - ${comboText} = ${KRW.format(altPrice)}${priceDiffText}`);
+      if (widthAxis === 'width' && overWidth > 0) {
+        alternativeLines.push(`안내: 가로로 ${overWidth}cm 재단이 필요합니다.`);
+      }
+    }
+
+    // 6-B. 보완 옵션 계산 제거: 기본 결과만 표시
+    const complementLines = [];
+
     return {
       type: `${rollLabel} - ${getThicknessLabel()}`,
       targetWidth,
@@ -564,7 +674,9 @@
       totalPrice,
       price: totalPrice,
       wastePercent,
-      breakdown,
+      breakdown: (complementLines.length > 0)
+        ? [...breakdown, ...complementLines]
+        : breakdown,
       coverageWidth,
       coverageHeight,
       fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight),
@@ -576,7 +688,7 @@
   }
 
   // 최적의 롤매트 폭 조합 찾기
-  function findBestRollWidthCombination(targetWidth, mode) {
+  function findBestRollWidthCombination(targetWidth, mode, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
     const availableWidths = getAvailableRollWidths();
     const allCombinations = [];
 
@@ -586,8 +698,8 @@
         const totalWidth = width * count;
 
         if (mode === 'exact') {
-          // 정확히 맞추기: targetWidth 이상
-          if (totalWidth >= targetWidth) {
+          // 정확히 맞추기: targetWidth 이상, 과충족은 exactOverageCap 이내
+          if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
             const waste = totalWidth - targetWidth;
             const wastePercent = (waste / totalWidth) * 100;
 
@@ -639,7 +751,7 @@
           const totalWidth = (w1 * count1) + (w2 * count2);
 
           if (mode === 'exact') {
-            if (totalWidth >= targetWidth && totalWidth <= targetWidth * 1.3) {
+            if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
               const waste = totalWidth - targetWidth;
               const wastePercent = (waste / totalWidth) * 100;
               const avgPriority = ((ROLL_WIDTH_PRIORITY[w1] || 2) + (ROLL_WIDTH_PRIORITY[w2] || 2)) / 2;
