@@ -68,12 +68,183 @@
 
   // 정확(≥) 조합에서 허용하는 최대 과충족(cm)
   const EXACT_OVERAGE_CAP_CM = 20;
-  // 여유 조합 부족폭이 클 때 대체 조합 탐색 기준(cm)
-  const SHORTAGE_FORCE_ALT_CM = 20;
   // 대체 조합 탐색 시 허용할 최대 과충족(cm)
   const EXTENDED_EXACT_OVERAGE_CAP_CM = 80;
   // 길이 방향 여유/부족 허용 임계치(cm)
   const LENGTH_RELAXATION_THRESHOLD_CM = 20;
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  function createPuzzleVisualization(spaceWidth, spaceHeight, coverageWidth, coverageHeight, result) {
+    const minorGrid = 10;
+    const majorGrid = 50;
+    const tiles = [];
+
+    // Hybrid 매트인 경우 (100cm + 50cm 조합)
+    if (result && result.n100x !== undefined && result.n100y !== undefined) {
+      const n100x = result.n100x;
+      const n100y = result.n100y;
+      const remainX = coverageWidth - (n100x * 100);
+      const remainY = coverageHeight - (n100y * 100);
+
+      // 1. 100cm 타일 영역 (메인 영역)
+      for (let y = 0; y < n100y; y++) {
+        for (let x = 0; x < n100x; x++) {
+          tiles.push({
+            x: x * 100,
+            y: y * 100,
+            width: 100,
+            height: 100,
+            size: 100
+          });
+        }
+      }
+
+      // 2. 오른쪽 세로 띠 (50cm 타일)
+      if (remainX > 0 && n100y > 0) {
+        const stripHeight = n100y * 100;
+        const cols50 = Math.ceil(remainX / 50);
+        const rows50 = Math.ceil(stripHeight / 50);
+        for (let y = 0; y < rows50; y++) {
+          for (let x = 0; x < cols50; x++) {
+            const tileX = (n100x * 100) + (x * 50);
+            const tileY = y * 50;
+            const tileWidth = Math.min(50, coverageWidth - tileX);
+            const tileHeight = Math.min(50, stripHeight - tileY);
+            if (tileWidth > 0 && tileHeight > 0) {
+              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
+            }
+          }
+        }
+      }
+
+      // 3. 아래쪽 가로 띠 (50cm 타일)
+      if (n100x > 0 && remainY > 0) {
+        const stripWidth = n100x * 100;
+        const cols50 = Math.ceil(stripWidth / 50);
+        const rows50 = Math.ceil(remainY / 50);
+        for (let y = 0; y < rows50; y++) {
+          for (let x = 0; x < cols50; x++) {
+            const tileX = x * 50;
+            const tileY = (n100y * 100) + (y * 50);
+            const tileWidth = Math.min(50, stripWidth - (x * 50));
+            const tileHeight = Math.min(50, coverageHeight - tileY);
+            if (tileWidth > 0 && tileHeight > 0) {
+              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
+            }
+          }
+        }
+      }
+
+      // 4. 오른쪽 아래 모서리 (50cm 타일)
+      if (remainX > 0 && remainY > 0) {
+        const cols50 = Math.ceil(remainX / 50);
+        const rows50 = Math.ceil(remainY / 50);
+        for (let y = 0; y < rows50; y++) {
+          for (let x = 0; x < cols50; x++) {
+            const tileX = (n100x * 100) + (x * 50);
+            const tileY = (n100y * 100) + (y * 50);
+            const tileWidth = Math.min(50, coverageWidth - tileX);
+            const tileHeight = Math.min(50, coverageHeight - tileY);
+            if (tileWidth > 0 && tileHeight > 0) {
+              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
+            }
+          }
+        }
+      }
+    } else {
+      // 50cm 또는 100cm 단일 타일 (기존 로직)
+      const tileSize = (result && result.nx && coverageWidth / result.nx >= 100) ? 100 : 50;
+      const cols = Math.max(1, Math.ceil(coverageWidth / tileSize));
+      const rows = Math.max(1, Math.ceil(coverageHeight / tileSize));
+
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const tileX = x * tileSize;
+          const tileY = y * tileSize;
+          const tileWidth = Math.min(tileSize, coverageWidth - tileX);
+          const tileHeight = Math.min(tileSize, coverageHeight - tileY);
+          if (tileWidth > 0 && tileHeight > 0) {
+            tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: tileSize });
+          }
+        }
+      }
+    }
+
+    return {
+      type: 'puzzle',
+      space: { width: spaceWidth, height: spaceHeight },
+      coverage: { width: coverageWidth, height: coverageHeight },
+      tiles,
+      gridMinor: minorGrid,
+      gridMajor: majorGrid
+    };
+  }
+
+  function createRollVisualization(spaceWidth, spaceHeight, result) {
+    const { coverageWidth = spaceWidth, coverageHeight = spaceHeight, solutions = [], widthAxis, rollLength, splitCount = 1 } = result;
+    if (!solutions || solutions.length === 0) return null;
+
+    const stripes = [];
+    // 길이 방향 실제 롤 길이 (분할 고려)
+    const actualRollLength = rollLength || (widthAxis === 'width' ? coverageHeight : coverageWidth);
+
+    if (widthAxis === 'width') {
+      // 가로로 폭이 나열되고, 세로가 길이 방향
+      let offsetX = 0;
+      solutions.forEach(sol => {
+        for (let i = 0; i < sol.count; i++) {
+          // splitCount만큼 세로로 분할하여 표시
+          for (let split = 0; split < splitCount; split++) {
+            stripes.push({
+              x: offsetX,
+              y: split * actualRollLength,
+              width: sol.width,
+              height: actualRollLength,
+              label: `${sol.width}cm`
+            });
+          }
+          offsetX += sol.width;
+        }
+      });
+    } else {
+      // 세로로 폭이 나열되고, 가로가 길이 방향
+      let offsetY = 0;
+      solutions.forEach(sol => {
+        for (let i = 0; i < sol.count; i++) {
+          // splitCount만큼 가로로 분할하여 표시
+          for (let split = 0; split < splitCount; split++) {
+            stripes.push({
+              x: split * actualRollLength,
+              y: offsetY,
+              width: actualRollLength,
+              height: sol.width,
+              label: `${sol.width}cm`
+            });
+          }
+          offsetY += sol.width;
+        }
+      });
+    }
+
+    return {
+      type: 'roll',
+      space: { width: spaceWidth, height: spaceHeight },
+      coverage: { width: coverageWidth, height: coverageHeight },
+      stripes,
+      widthAxis,
+      gridMinor: 10,
+      gridMajor: 50
+    };
+  }
+
+  function createVisualizationData(spaceType, spaceWidth, spaceHeight, result) {
+    if (!result) return null;
+    if (spaceType === 'roll' || spaceType === 'petRoll') {
+      return createRollVisualization(spaceWidth, spaceHeight, result);
+    }
+    return createPuzzleVisualization(spaceWidth, spaceHeight, result.coverageWidth ?? spaceWidth, result.coverageHeight ?? spaceHeight, result);
+  }
 
   let spaceCounter = 0;
   const spaces = [];
@@ -87,7 +258,7 @@
     puzzle: {
       name: '퍼즐매트',
       image: './images/puzzle-mat-placeholder.svg',
-      imageReal: './images/product_03.jpg',  // 실제 이미지 경로
+      imageReal: './images/product_03.jpg',
       description: '두께 선택: 25T / 25T Plus+ / 40T',
       link: 'https://brand.naver.com/ddasaroom/products/5994906898'
     },
@@ -690,7 +861,8 @@
       pcs: totalRolls,
       rollCount: totalRolls,
       totalRollUnits,
-      shippingMemo
+      shippingMemo,
+      widthAxis
     };
   }
 
@@ -934,11 +1106,16 @@
       result = calculateHybrid(W, H, mode);
     }
 
+    const visualization = createVisualizationData(type, W, H, result);
+
     return {
       name: name,
       width: W,
       height: H,
       mode: mode === 'exact' ? '정확히 맞추기' : '여유있게 깔기',
+      modeKey: mode,
+      spaceType: type,
+      visualization,
       ...result
     };
   }
@@ -1050,6 +1227,10 @@
             totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
           });
         }
+        totalCompositionHTML += `
+          <div class="space-visual-wrapper">
+            <div class="space-visual" data-space-visual-id="${r.index}"></div>
+          </div>`;
         if (idx < spaceResults.length - 1) {
           totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
@@ -1061,6 +1242,8 @@
       totalCompositionHTML = '-';
     }
     $totalComposition.innerHTML = totalCompositionHTML;
+
+    renderSpaceVisualizations(spaceResults);
 
     let totalPcsText = '-';
     if (activeSpaces > 0) {
@@ -1103,18 +1286,7 @@
 
     let text = '견적 결과\n\n';
 
-    text += '[ 제품 정보 ]\n';
-    text += `제품: ${productInfo.name} - ${getThicknessLabel()}\n`;
-    // 퍼즐매트만 계산방식 표시 및 마감재 안내 추가
-    if (currentProduct === 'puzzle') {
-      text += `계산방식: ${calcModeText}\n`;
-    }
-    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      text += '제품 출고 시 온도차에 의한 수축, 재단 과정에서의 오차를 고려해 여분을 두고 출고합니다.\n';
-    }
-    text += '\n';
-
-    text += '[ 총 구성 ]\n';
+    text += '견적내용\n';
     spaceResults.forEach((r, idx) => {
       const spaceName = r.name || `공간 ${idx + 1}`;
       text += `\n${spaceName} (${r.width}cm × ${r.height}cm)\n`;
@@ -1156,10 +1328,485 @@
       text += `${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
     }
 
-    text += '\n[ 총 가격 (할인 미적용가) ]\n';
-    text += `${KRW.format(totalPrice)}`;
+    text += '\n[ 총 가격 ]\n';
+    text += `${KRW.format(totalPrice)} (할인 미적용가)`;
 
     return text;
+  }
+
+  function renderSpaceVisualizations(spaceResults) {
+    if (!spaceResults || spaceResults.length === 0) return;
+
+    spaceResults.forEach(result => {
+      const container = document.querySelector(`[data-space-visual-id="${result.index}"]`);
+      if (!container) return;
+
+      const vis = result.visualization;
+      if (!vis) {
+        container.style.display = 'none';
+        return;
+      }
+
+      const spaceWidth = Math.max(vis.space.width, 1);
+      const spaceHeight = Math.max(vis.space.height, 1);
+      const coverageWidth = Math.max(vis.coverage.width, 1);
+      const coverageHeight = Math.max(vis.coverage.height, 1);
+      const baseWidth = Math.max(spaceWidth, coverageWidth);
+      const baseHeight = Math.max(spaceHeight, coverageHeight);
+
+      // 여백 추가 (좌우상하 각 15% 여백)
+      const padding = Math.max(baseWidth, baseHeight) * 0.15;
+      const viewBoxWidth = baseWidth + padding * 2;
+      const viewBoxHeight = baseHeight + padding * 2;
+
+      container.innerHTML = '';
+      container.style.display = 'block';
+      container.dataset.deferRender = '';
+
+      const rect = container.getBoundingClientRect();
+      const containerSize = rect.width || rect.height || container.clientWidth;
+      if (!containerSize) {
+        if (!container.dataset.deferScheduled) {
+          container.dataset.deferScheduled = '1';
+          requestAnimationFrame(() => renderSpaceVisualizations(spaceResults));
+        }
+        return;
+      }
+
+      delete container.dataset.deferScheduled;
+
+      const scale = containerSize / Math.max(viewBoxWidth, viewBoxHeight);
+      const gridMinor = vis.gridMinor || 10;
+      const gridMajor = vis.gridMajor || gridMinor * 5;
+      container.style.setProperty('--grid-size-small', `${gridMinor * scale}px`);
+      container.style.setProperty('--grid-size-large', `${gridMajor * scale}px`);
+
+      const svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('width', '100%');
+      svg.setAttribute('height', '100%');
+      svg.setAttribute('viewBox', `${-padding} ${-padding} ${viewBoxWidth} ${viewBoxHeight}`);
+      svg.setAttribute('class', 'space-visual-svg');
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      // 격자선 그리기 (매트 영역 기준)
+      const gridGroup = document.createElementNS(SVG_NS, 'g');
+      gridGroup.setAttribute('opacity', '0.3');
+
+      // 세로 격자선 (Minor grid - 10cm)
+      for (let x = 0; x <= baseWidth; x += gridMinor) {
+        const line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', x);
+        line.setAttribute('y1', 0);
+        line.setAttribute('x2', x);
+        line.setAttribute('y2', baseHeight);
+        line.setAttribute('stroke', '#94a3b8');
+        line.setAttribute('stroke-width', x % gridMajor === 0 ? 0.8 : 0.3);
+        gridGroup.appendChild(line);
+      }
+
+      // 가로 격자선 (Minor grid - 10cm)
+      for (let y = 0; y <= baseHeight; y += gridMinor) {
+        const line = document.createElementNS(SVG_NS, 'line');
+        line.setAttribute('x1', 0);
+        line.setAttribute('y1', y);
+        line.setAttribute('x2', baseWidth);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#94a3b8');
+        line.setAttribute('stroke-width', y % gridMajor === 0 ? 0.8 : 0.3);
+        gridGroup.appendChild(line);
+      }
+
+      svg.appendChild(gridGroup);
+
+      const spaceRect = document.createElementNS(SVG_NS, 'rect');
+      spaceRect.setAttribute('x', 0);
+      spaceRect.setAttribute('y', 0);
+      spaceRect.setAttribute('width', spaceWidth);
+      spaceRect.setAttribute('height', spaceHeight);
+      spaceRect.setAttribute('fill', 'rgba(226, 232, 240, 0.35)');
+      spaceRect.setAttribute('stroke', '#94a3b8');
+      spaceRect.setAttribute('stroke-dasharray', '6 4');
+      svg.appendChild(spaceRect);
+
+      const coverageRect = document.createElementNS(SVG_NS, 'rect');
+      coverageRect.setAttribute('x', 0);
+      coverageRect.setAttribute('y', 0);
+      coverageRect.setAttribute('width', coverageWidth);
+      coverageRect.setAttribute('height', coverageHeight);
+      coverageRect.setAttribute('fill', 'rgba(37, 99, 235, 0.14)');
+      coverageRect.setAttribute('stroke', '#2563eb');
+      coverageRect.setAttribute('stroke-width', 1.2);
+      svg.appendChild(coverageRect);
+
+      if (vis.type === 'puzzle' && Array.isArray(vis.tiles)) {
+        vis.tiles.forEach((tile, idx) => {
+          const tileRect = document.createElementNS(SVG_NS, 'rect');
+          tileRect.setAttribute('x', tile.x);
+          tileRect.setAttribute('y', tile.y);
+          tileRect.setAttribute('width', tile.width);
+          tileRect.setAttribute('height', tile.height);
+
+          // 100cm 타일과 50cm 타일을 다른 색상으로 표시
+          if (tile.size === 100) {
+            tileRect.setAttribute('fill', 'rgba(37, 99, 235, 0.6)');
+            tileRect.setAttribute('stroke', '#1e40af');
+            tileRect.setAttribute('stroke-width', 1.2);
+          } else {
+            tileRect.setAttribute('fill', idx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
+            tileRect.setAttribute('stroke', '#1d4ed8');
+            tileRect.setAttribute('stroke-width', 0.6);
+          }
+
+          svg.appendChild(tileRect);
+
+          // 타일 중앙에 사이즈 표기 (충분히 큰 타일에만)
+          if (tile.width >= 30 && tile.height >= 30) {
+            const centerX = tile.x + tile.width / 2;
+            const centerY = tile.y + tile.height / 2;
+            const tileLabel = document.createElementNS(SVG_NS, 'text');
+            tileLabel.setAttribute('x', centerX);
+            tileLabel.setAttribute('y', centerY);
+            tileLabel.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
+            tileLabel.setAttribute('fill', '#ffffff');
+            tileLabel.setAttribute('font-weight', '500');
+            tileLabel.setAttribute('text-anchor', 'middle');
+            tileLabel.setAttribute('dominant-baseline', 'middle');
+            tileLabel.textContent = `${tile.width}×${tile.height}cm`;
+            svg.appendChild(tileLabel);
+          }
+        });
+      } else if (vis.type === 'roll' && Array.isArray(vis.stripes)) {
+        const colors = ['rgba(59, 130, 246, 0.55)', 'rgba(37, 99, 235, 0.55)', 'rgba(96, 165, 250, 0.55)'];
+        vis.stripes.forEach((strip, idx) => {
+          const stripRect = document.createElementNS(SVG_NS, 'rect');
+          stripRect.setAttribute('x', strip.x);
+          stripRect.setAttribute('y', strip.y);
+          stripRect.setAttribute('width', strip.width);
+          stripRect.setAttribute('height', strip.height);
+          stripRect.setAttribute('fill', colors[idx % colors.length]);
+          stripRect.setAttribute('stroke', '#1d4ed8');
+          stripRect.setAttribute('stroke-width', 0.8);
+          svg.appendChild(stripRect);
+
+          // 스트라이프 중앙에 사이즈 표기 (충분히 큰 영역에만)
+          const minDimension = Math.min(strip.width, strip.height);
+          if (minDimension >= 20) {
+            const centerX = strip.x + strip.width / 2;
+            const centerY = strip.y + strip.height / 2;
+            const stripLabel = document.createElementNS(SVG_NS, 'text');
+            stripLabel.setAttribute('x', centerX);
+            stripLabel.setAttribute('y', centerY);
+            stripLabel.setAttribute('font-size', minDimension * 0.1);
+            stripLabel.setAttribute('fill', '#ffffff');
+            stripLabel.setAttribute('font-weight', '500');
+            stripLabel.setAttribute('text-anchor', 'middle');
+            stripLabel.setAttribute('dominant-baseline', 'middle');
+            stripLabel.textContent = `${strip.width}×${strip.height}cm`;
+            svg.appendChild(stripLabel);
+          }
+        });
+      }
+
+      // 격자 수치 레이블 추가 (왼쪽과 상단)
+      const maxDimension = Math.max(baseWidth, baseHeight);
+      const fontSize = Math.max(3, maxDimension * 0.015); // 동적 폰트 크기
+      const labelOffset = fontSize * 0.3; // 레이블 간격
+
+      // 상단 가로 레이블 (50cm 간격)
+      for (let x = 0; x <= baseWidth; x += gridMajor) {
+        if (x === 0) continue; // 0cm은 왼쪽 세로 레이블에서만 표시
+        const labelText = document.createElementNS(SVG_NS, 'text');
+        labelText.setAttribute('x', x);
+        labelText.setAttribute('y', -labelOffset);
+        labelText.setAttribute('font-size', fontSize);
+        labelText.setAttribute('fill', '#64748b');
+        labelText.setAttribute('text-anchor', 'middle');
+        labelText.setAttribute('dominant-baseline', 'bottom');
+        labelText.textContent = `${x}cm`;
+        svg.appendChild(labelText);
+      }
+
+      // 왼쪽 세로 레이블 (50cm 간격)
+      for (let y = 0; y <= baseHeight; y += gridMajor) {
+        const labelText = document.createElementNS(SVG_NS, 'text');
+        labelText.setAttribute('x', -labelOffset);
+        labelText.setAttribute('y', y);
+        labelText.setAttribute('font-size', fontSize);
+        labelText.setAttribute('fill', '#64748b');
+        labelText.setAttribute('text-anchor', 'end');
+        labelText.setAttribute('dominant-baseline', 'middle');
+        labelText.textContent = `${y}cm`;
+        svg.appendChild(labelText);
+      }
+
+      container.appendChild(svg);
+
+      // 공간명 레이블 (좌측 상단 - 절대 위치)
+      const spaceName = result.name || `공간 ${result.index}`;
+      const spaceNameDiv = document.createElement('div');
+      spaceNameDiv.className = 'space-visual-name';
+      spaceNameDiv.textContent = spaceName;
+      container.appendChild(spaceNameDiv);
+
+      // 확대 버튼 (우측 상단 - 절대 위치)
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-canvas-btn';
+      expandBtn.title = '확대하기';
+      expandBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      `;
+      expandBtn.addEventListener('click', () => {
+        // 모달 생성
+        const modal = document.createElement('div');
+        modal.className = 'visualization-modal';
+        modal.innerHTML = `
+          <div class="visualization-modal-backdrop"></div>
+          <div class="visualization-modal-content">
+            <button class="visualization-modal-close" title="닫기">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+            <div class="visualization-modal-canvas"></div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        // 닫기 기능
+        const closeModal = () => {
+          modal.classList.add('closing');
+          setTimeout(() => {
+            document.body.removeChild(modal);
+          }, 200);
+        };
+
+        modal.querySelector('.visualization-modal-close').addEventListener('click', closeModal);
+        modal.querySelector('.visualization-modal-backdrop').addEventListener('click', closeModal);
+
+        // ESC 키로 닫기
+        const handleEsc = (e) => {
+          if (e.key === 'Escape') {
+            closeModal();
+            document.removeEventListener('keydown', handleEsc);
+          }
+        };
+        document.addEventListener('keydown', handleEsc);
+
+        // 모달에 시각화 렌더링
+        setTimeout(() => {
+          renderSpaceVisualizationInModal(result, modal.querySelector('.visualization-modal-canvas'));
+        }, 50);
+      });
+      container.appendChild(expandBtn);
+
+      const info = document.createElement('div');
+      info.className = 'space-visual-info';
+      info.innerHTML = `
+        <div class="space-visual-dim space">공간 ${spaceWidth}cm × ${spaceHeight}cm</div>
+        <div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>
+      `;
+      container.appendChild(info);
+    });
+  }
+
+  function renderSpaceVisualizationInModal(result, container) {
+    if (!container || !result) return;
+
+    const vis = result.visualization;
+    if (!vis) return;
+
+    const spaceWidth = Math.max(vis.space.width, 1);
+    const spaceHeight = Math.max(vis.space.height, 1);
+    const coverageWidth = Math.max(vis.coverage.width, 1);
+    const coverageHeight = Math.max(vis.coverage.height, 1);
+    const baseWidth = Math.max(spaceWidth, coverageWidth);
+    const baseHeight = Math.max(spaceHeight, coverageHeight);
+
+    // 여백 추가 (좌우상하 각 20% 여백)
+    const padding = Math.max(baseWidth, baseHeight) * 0.2;
+    const viewBoxWidth = baseWidth + padding * 2;
+    const viewBoxHeight = baseHeight + padding * 2;
+
+    const gridMinor = vis.gridMinor || 10;
+    const gridMajor = vis.gridMajor || gridMinor * 5;
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.setAttribute('viewBox', `${-padding} ${-padding} ${viewBoxWidth} ${viewBoxHeight}`);
+    svg.setAttribute('class', 'space-visual-svg');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    // 격자선 그리기
+    const gridGroup = document.createElementNS(SVG_NS, 'g');
+    gridGroup.setAttribute('opacity', '0.3');
+
+    for (let x = 0; x <= baseWidth; x += gridMinor) {
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('x1', x);
+      line.setAttribute('y1', 0);
+      line.setAttribute('x2', x);
+      line.setAttribute('y2', baseHeight);
+      line.setAttribute('stroke', '#94a3b8');
+      line.setAttribute('stroke-width', x % gridMajor === 0 ? 0.8 : 0.3);
+      gridGroup.appendChild(line);
+    }
+
+    for (let y = 0; y <= baseHeight; y += gridMinor) {
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('x1', 0);
+      line.setAttribute('y1', y);
+      line.setAttribute('x2', baseWidth);
+      line.setAttribute('y2', y);
+      line.setAttribute('stroke', '#94a3b8');
+      line.setAttribute('stroke-width', y % gridMajor === 0 ? 0.8 : 0.3);
+      gridGroup.appendChild(line);
+    }
+
+    svg.appendChild(gridGroup);
+
+    // 공간 영역
+    const spaceRect = document.createElementNS(SVG_NS, 'rect');
+    spaceRect.setAttribute('x', 0);
+    spaceRect.setAttribute('y', 0);
+    spaceRect.setAttribute('width', spaceWidth);
+    spaceRect.setAttribute('height', spaceHeight);
+    spaceRect.setAttribute('fill', 'rgba(226, 232, 240, 0.35)');
+    spaceRect.setAttribute('stroke', '#94a3b8');
+    spaceRect.setAttribute('stroke-dasharray', '6 4');
+    svg.appendChild(spaceRect);
+
+    // 매트 영역
+    const coverageRect = document.createElementNS(SVG_NS, 'rect');
+    coverageRect.setAttribute('x', 0);
+    coverageRect.setAttribute('y', 0);
+    coverageRect.setAttribute('width', coverageWidth);
+    coverageRect.setAttribute('height', coverageHeight);
+    coverageRect.setAttribute('fill', 'rgba(37, 99, 235, 0.14)');
+    coverageRect.setAttribute('stroke', '#2563eb');
+    coverageRect.setAttribute('stroke-width', 1.2);
+    svg.appendChild(coverageRect);
+
+    // 타일 또는 스트라이프 렌더링
+    if (vis.type === 'puzzle' && Array.isArray(vis.tiles)) {
+      vis.tiles.forEach((tile, idx) => {
+        const tileRect = document.createElementNS(SVG_NS, 'rect');
+        tileRect.setAttribute('x', tile.x);
+        tileRect.setAttribute('y', tile.y);
+        tileRect.setAttribute('width', tile.width);
+        tileRect.setAttribute('height', tile.height);
+
+        if (tile.size === 100) {
+          tileRect.setAttribute('fill', 'rgba(37, 99, 235, 0.6)');
+          tileRect.setAttribute('stroke', '#1e40af');
+          tileRect.setAttribute('stroke-width', 1.2);
+        } else {
+          tileRect.setAttribute('fill', idx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
+          tileRect.setAttribute('stroke', '#1d4ed8');
+          tileRect.setAttribute('stroke-width', 0.6);
+        }
+
+        svg.appendChild(tileRect);
+
+        if (tile.width >= 30 && tile.height >= 30) {
+          const centerX = tile.x + tile.width / 2;
+          const centerY = tile.y + tile.height / 2;
+          const tileLabel = document.createElementNS(SVG_NS, 'text');
+          tileLabel.setAttribute('x', centerX);
+          tileLabel.setAttribute('y', centerY);
+          tileLabel.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
+          tileLabel.setAttribute('fill', '#ffffff');
+          tileLabel.setAttribute('font-weight', '500');
+          tileLabel.setAttribute('text-anchor', 'middle');
+          tileLabel.setAttribute('dominant-baseline', 'middle');
+          tileLabel.textContent = `${tile.width}×${tile.height}cm`;
+          svg.appendChild(tileLabel);
+        }
+      });
+    } else if (vis.type === 'roll' && Array.isArray(vis.stripes)) {
+      const colors = ['rgba(59, 130, 246, 0.55)', 'rgba(37, 99, 235, 0.55)', 'rgba(96, 165, 250, 0.55)'];
+      vis.stripes.forEach((strip, idx) => {
+        const stripRect = document.createElementNS(SVG_NS, 'rect');
+        stripRect.setAttribute('x', strip.x);
+        stripRect.setAttribute('y', strip.y);
+        stripRect.setAttribute('width', strip.width);
+        stripRect.setAttribute('height', strip.height);
+        stripRect.setAttribute('fill', colors[idx % colors.length]);
+        stripRect.setAttribute('stroke', '#1d4ed8');
+        stripRect.setAttribute('stroke-width', 0.8);
+        svg.appendChild(stripRect);
+
+        const minDimension = Math.min(strip.width, strip.height);
+        if (minDimension >= 20) {
+          const centerX = strip.x + strip.width / 2;
+          const centerY = strip.y + strip.height / 2;
+          const stripLabel = document.createElementNS(SVG_NS, 'text');
+          stripLabel.setAttribute('x', centerX);
+          stripLabel.setAttribute('y', centerY);
+          stripLabel.setAttribute('font-size', minDimension * 0.1);
+          stripLabel.setAttribute('fill', '#ffffff');
+          stripLabel.setAttribute('font-weight', '500');
+          stripLabel.setAttribute('text-anchor', 'middle');
+          stripLabel.setAttribute('dominant-baseline', 'middle');
+          stripLabel.textContent = `${strip.width}×${strip.height}cm`;
+          svg.appendChild(stripLabel);
+        }
+      });
+    }
+
+    // 격자 레이블
+    const maxDimension = Math.max(baseWidth, baseHeight);
+    const fontSize = Math.max(3, maxDimension * 0.015);
+    const labelOffset = fontSize * 0.3;
+
+    for (let x = 0; x <= baseWidth; x += gridMajor) {
+      if (x === 0) continue;
+      const labelText = document.createElementNS(SVG_NS, 'text');
+      labelText.setAttribute('x', x);
+      labelText.setAttribute('y', -labelOffset);
+      labelText.setAttribute('font-size', fontSize);
+      labelText.setAttribute('fill', '#64748b');
+      labelText.setAttribute('text-anchor', 'middle');
+      labelText.setAttribute('dominant-baseline', 'bottom');
+      labelText.textContent = `${x}cm`;
+      svg.appendChild(labelText);
+    }
+
+    for (let y = 0; y <= baseHeight; y += gridMajor) {
+      const labelText = document.createElementNS(SVG_NS, 'text');
+      labelText.setAttribute('x', -labelOffset);
+      labelText.setAttribute('y', y);
+      labelText.setAttribute('font-size', fontSize);
+      labelText.setAttribute('fill', '#64748b');
+      labelText.setAttribute('text-anchor', 'end');
+      labelText.setAttribute('dominant-baseline', 'middle');
+      labelText.textContent = `${y}cm`;
+      svg.appendChild(labelText);
+    }
+
+    container.appendChild(svg);
+
+    // 공간명 레이블
+    const spaceName = result.name || `공간 ${result.index}`;
+    const spaceNameDiv = document.createElement('div');
+    spaceNameDiv.className = 'space-visual-name';
+    spaceNameDiv.textContent = spaceName;
+    container.appendChild(spaceNameDiv);
+
+    // 정보 레이블
+    const info = document.createElement('div');
+    info.className = 'space-visual-info';
+    info.innerHTML = `
+      <div class="space-visual-dim space">공간 ${spaceWidth}cm × ${spaceHeight}cm</div>
+      <div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>
+    `;
+    container.appendChild(info);
   }
 
   let copySuccessTimeout = null;
