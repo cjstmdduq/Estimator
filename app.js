@@ -37,6 +37,14 @@
     140: 1   // 높은 우선순위
   };
 
+  function getRollWidthPriority(width, thickness) {
+    let priority = ROLL_WIDTH_PRIORITY[width] ?? 2;
+    if (thickness === 17 && width === 70) {
+      priority += 2;
+    }
+    return priority;
+  }
+
   // 롤매트 두께별 최대 길이 (cm)
   const ROLL_MAX_LENGTH = {
     6: 1300,   // 13m
@@ -58,9 +66,6 @@
     { min: 180, max: 190, prefer: [{ width: 110, count: 2, mode: 'exact' }] }
   ];
 
-  // 여유 해의 부족폭이 이 값 이상이면 정확(재단) 해를 기본 선택으로 전환
-  const SHORTAGE_SWITCH_CM = 10;
-
   // 정확(≥) 조합에서 허용하는 최대 과충족(cm)
   const EXACT_OVERAGE_CAP_CM = 20;
   // 여유 조합 부족폭이 클 때 대체 조합 탐색 기준(cm)
@@ -68,7 +73,7 @@
   // 대체 조합 탐색 시 허용할 최대 과충족(cm)
   const EXTENDED_EXACT_OVERAGE_CAP_CM = 80;
   // 길이 방향 여유/부족 허용 임계치(cm)
-  const LENGTH_RELAXATION_THRESHOLD_CM = 10;
+  const LENGTH_RELAXATION_THRESHOLD_CM = 20;
 
   let spaceCounter = 0;
   const spaces = [];
@@ -342,13 +347,13 @@
     if (widthDiff > 0) {
       messages.push(`가로로 ${widthDiff}cm 재단이 필요합니다.`);
     } else if (widthDiff < 0) {
-      messages.push(`가로로 ${Math.abs(widthDiff)}cm 공간이 남습니다.`);
+      messages.push(`가로로 ${Math.abs(widthDiff)}cm 매트가 부족합니다.`);
     }
 
     if (heightDiff > 0) {
       messages.push(`세로로 ${heightDiff}cm 재단이 필요합니다.`);
     } else if (heightDiff < 0) {
-      messages.push(`세로로 ${Math.abs(heightDiff)}cm 공간이 남습니다.`);
+      messages.push(`세로로 ${Math.abs(heightDiff)}cm 매트가 부족합니다.`);
     }
 
     if (messages.length === 0) {
@@ -469,110 +474,79 @@
     const width50 = width % 50 === 0;
     const height50 = height % 50 === 0;
 
-    let targetWidth, targetLength;  // 롤매트의 폭과 길이
-    let widthAxis = 'width'; // 롤 폭이 가로 방향을 덮는지 여부
+    let targetWidth, targetLength;
+    let widthAxis = 'width';
 
     if (width50 && !height50) {
-      // 가로가 50cm 배수 → 가로를 길이로
       targetLength = width;
       targetWidth = height;
       widthAxis = 'height';
     } else if (!width50 && height50) {
-      // 세로가 50cm 배수 → 세로를 길이로
       targetLength = height;
       targetWidth = width;
       widthAxis = 'width';
+    } else if (width <= height) {
+      targetWidth = width;
+      targetLength = height;
+      widthAxis = 'width';
     } else {
-      // 둘 다 50cm 배수이거나 둘 다 아님 → 작은 쪽을 폭으로
-      if (width <= height) {
-        targetWidth = width;
-        targetLength = height;
-        widthAxis = 'width';
-      } else {
-        targetWidth = height;
-        targetLength = width;
-        widthAxis = 'height';
-      }
+      targetWidth = height;
+      targetLength = width;
+      widthAxis = 'height';
     }
 
-    // 2. 최적 폭 조합 찾기: 기본은 여유(≤), 대안으로 정확(≥)도 함께 계산
-    const looseSolutions = findBestRollWidthCombination(targetWidth, 'loose');
-    const exactSolutions = findBestRollWidthCombination(targetWidth, 'exact');
+    // 2. 가능한 폭 조합 수집
+    const thickness = parseInt(currentThickness);
+    const looseCombos = generateRollWidthCombinations(targetWidth, 'loose');
+    const exactCombos = generateRollWidthCombinations(targetWidth, 'exact');
+    const extendedExactCombos = generateRollWidthCombinations(
+      targetWidth,
+      'exact',
+      { exactOverageCap: EXTENDED_EXACT_OVERAGE_CAP_CM }
+    );
 
-    // 2-A. 고객 선호 규칙 적용: 해당 구간이면 우선 사용
-    function matchPreferredRule(targetWidth, loose, exact) {
-      if (!PREFERRED_WIDTH_RULES || PREFERRED_WIDTH_RULES.length === 0) return null;
-      const rule = PREFERRED_WIDTH_RULES.find(r => targetWidth >= r.min && targetWidth <= r.max);
-      if (!rule) return null;
-      // 현재 구현에서는 첫 선호안만 검사
-      const pref = rule.prefer[0];
-      if (!pref) return null;
-      const isLoose = pref.mode === 'loose';
-      const candidate = isLoose ? loose : exact;
-      if (!candidate) return null;
-      if (candidate.length !== 1) return null;
-      const only = candidate[0];
-      if (only.width === pref.width && only.count === pref.count) {
-        return candidate;
-      }
-      return null;
-    }
-
-    // 2-B. "남는공간 10cm 이하이면 작은 조합 선호" 규칙 (여유 해 존재 시 우선 적용)
-    function preferSmallIfTinyGap(targetWidth, loose) {
-      if (!loose) return null;
-      const looseUsed = loose.reduce((s, x) => s + x.width * x.count, 0);
-      const gap = targetWidth - looseUsed; // >0이면 부족
-      if (gap > 0 && gap <= 10) return loose;
-      return null;
-    }
-
-    // 2-C. 부족폭이 큰 경우(≥ SHORTAGE_SWITCH_CM) 정확 해로 전환
-    function switchToExactIfLargeShortage(targetWidth, loose, exact) {
-      if (!loose || !exact) return null;
-      const looseUsed = loose.reduce((s, x) => s + x.width * x.count, 0);
-      const gap = targetWidth - looseUsed; // >0이면 부족
-      if (gap >= SHORTAGE_SWITCH_CM) return exact;
-      return null;
-    }
-
-    let solutions = preferSmallIfTinyGap(targetWidth, looseSolutions)
-      || matchPreferredRule(targetWidth, looseSolutions, exactSolutions)
-      || switchToExactIfLargeShortage(targetWidth, looseSolutions, exactSolutions)
-      || looseSolutions
-      || exactSolutions;
-
-    if (!solutions || solutions.length === 0) {
-      return null;
-    }
-
-    // 여유 조합에서 부족폭이 크게 남을 경우 확장 정확 조합으로 전환 시도
-    if (solutions === looseSolutions && looseSolutions) {
-      const looseUsedWidth = looseSolutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
-      const looseGap = targetWidth - looseUsedWidth;
-      if (looseGap >= SHORTAGE_FORCE_ALT_CM) {
-        const extendedExactSolutions = findBestRollWidthCombination(
-          targetWidth,
-          'exact',
-          { exactOverageCap: EXTENDED_EXACT_OVERAGE_CAP_CM }
-        );
-        if (extendedExactSolutions) {
-          solutions = extendedExactSolutions;
+    const combinationMap = new Map();
+    function addCombinationList(list, source) {
+      if (!list) return;
+      list.forEach(combo => {
+        const key = combo.solutions
+          .map(sol => `${sol.width}x${sol.count}`)
+          .sort()
+          .join('|');
+        if (!combinationMap.has(key)) {
+          combinationMap.set(key, { ...combo, source });
         }
-      }
+      });
+    }
+
+    addCombinationList(looseCombos, 'loose');
+    addCombinationList(exactCombos, 'exact');
+    addCombinationList(extendedExactCombos, 'exactExtended');
+
+    const combinationCandidates = Array.from(combinationMap.values());
+    if (combinationCandidates.length === 0) {
+      return null;
+    }
+
+    const preferredRule = (PREFERRED_WIDTH_RULES || []).find(rule => targetWidth >= rule.min && targetWidth <= rule.max);
+    if (preferredRule) {
+      combinationCandidates.forEach(candidate => {
+        if (candidate.solutions.length !== 1) return;
+        const only = candidate.solutions[0];
+        const matched = preferredRule.prefer?.some(pref => pref.width === only.width && pref.count === only.count && pref.mode === candidate.mode);
+        if (matched) {
+          candidate.preferred = true;
+        }
+      });
     }
 
     // 3. 길이 계산 (50cm 단위, 최대 길이 제한 적용)
-    const thickness = parseInt(currentThickness);
     const maxLength = ROLL_MAX_LENGTH[thickness] || Infinity;
-    
     let calculatedLength;
     const lengthCeil = ceilDiv(targetLength, 50) * 50;
     const lengthFloor = Math.floor(targetLength / 50) * 50;
     calculatedLength = lengthCeil;
 
-    // 길이 방향도 10cm 이하 여유면 더 짧은 길이 추천
-    const ceilOverage = lengthCeil - targetLength;
     const floorShortage = targetLength - lengthFloor;
     if (lengthFloor > 0 && floorShortage > 0 && floorShortage <= LENGTH_RELAXATION_THRESHOLD_CM) {
       calculatedLength = lengthFloor;
@@ -581,97 +555,119 @@
     if (calculatedLength <= 0) {
       calculatedLength = 50;
     }
-    
-    // 최대 길이 초과 시 균등 분할
-    let rollLength, splitCount;
+
+    let rollLength;
+    let splitCount;
     if (calculatedLength <= maxLength) {
-      // 한 롤로 가능
       rollLength = calculatedLength;
       splitCount = 1;
     } else {
-      // 균등 분할 (가장 적은 분할로)
       const fullRolls = Math.ceil(calculatedLength / maxLength);
-      rollLength = Math.ceil(calculatedLength / fullRolls / 50) * 50;  // 50cm 단위로 올림
+      rollLength = Math.ceil(calculatedLength / fullRolls / 50) * 50;
       splitCount = fullRolls;
     }
 
-    // 4. 가격 계산 (두께별 가격 적용)
-    const lengthIn50cm = rollLength / 50;  // 50cm 단위 개수
-    let totalPrice = 0;
-    let breakdown = [];
+    // 4. 조합 평가 및 가격 계산
+    const lengthIn50cm = rollLength / 50;
+    const evaluatedCombos = combinationCandidates.map(combo => {
+      const usedWidth = combo.solutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
+      const widthDiff = usedWidth - targetWidth;
+      const wasteAbsCm = Math.abs(widthDiff);
+
+      let comboPrice = 0;
+      let valid = true;
+      combo.solutions.forEach(sol => {
+        const pricePerUnit = ROLL_PRICES[thickness][sol.width];
+        if (pricePerUnit == null) {
+          valid = false;
+          return;
+        }
+        comboPrice += pricePerUnit * lengthIn50cm * sol.count * splitCount;
+      });
+      if (!valid) return null;
+
+      const baseRollCount = combo.solutions.reduce((sum, sol) => sum + sol.count, 0);
+      const rollCountWithSplit = baseRollCount * splitCount;
+
+      return {
+        ...combo,
+        price: comboPrice,
+        usedWidth,
+        widthDiff,
+        wasteAbsCm,
+        rollCountWithSplit,
+        preferred: combo.preferred === true
+      };
+    }).filter(Boolean);
+
+    if (evaluatedCombos.length === 0) {
+      return null;
+    }
+
+    evaluatedCombos.sort((a, b) => {
+      if (Math.abs(a.wasteAbsCm - b.wasteAbsCm) > 0.0001) {
+        return a.wasteAbsCm - b.wasteAbsCm;
+      }
+      if (Math.abs(a.price - b.price) > 0.0001) {
+        return a.price - b.price;
+      }
+      const aCovers = a.widthDiff >= 0 ? 1 : 0;
+      const bCovers = b.widthDiff >= 0 ? 1 : 0;
+      if (aCovers !== bCovers) {
+        return bCovers - aCovers;
+      }
+      if (a.preferred !== b.preferred) {
+        return a.preferred ? -1 : 1;
+      }
+      if (a.sameWidth !== b.sameWidth) {
+        return b.sameWidth - a.sameWidth;
+      }
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      return a.rollCountWithSplit - b.rollCountWithSplit;
+    });
+
+    const bestCombo = evaluatedCombos[0];
+    const solutions = bestCombo.solutions;
+    const totalPrice = bestCombo.price;
+    const breakdown = [];
 
     solutions.forEach(sol => {
-      const pricePerUnit = ROLL_PRICES[thickness][sol.width];  // 50cm 당 가격
-      const price = pricePerUnit * lengthIn50cm * sol.count * splitCount;
-      totalPrice += price;
-      
+      const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
       if (isPet) {
-        // 애견 롤매트: 폭별 정보와 구매 단위를 한 줄에 표시
         const units = lengthIn50cm * sol.count * splitCount;
-        const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
         breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText} (50cm ${units}개 구매)`);
       } else {
-        const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
         breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText}`);
       }
     });
 
-    // 5. 낭비율 계산
+    // 5. 낭비율 및 커버리지 계산
     const actualArea = width * height;
-    const usedWidth = solutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
+    const usedWidth = bestCombo.usedWidth;
     const totalUsedLength = rollLength * splitCount;
     const usedArea = usedWidth * totalUsedLength;
     const wastePercent = actualArea > 0 ? Math.round(((usedArea - actualArea) / usedArea) * 100) : 0;
     const coverageWidth = widthAxis === 'width' ? usedWidth : totalUsedLength;
     const coverageHeight = widthAxis === 'width' ? totalUsedLength : usedWidth;
-    const totalRolls = solutions.reduce((sum, sol) => sum + sol.count, 0) * splitCount;
+    const totalRolls = bestCombo.rollCountWithSplit;
     const totalRollUnits = lengthIn50cm * totalRolls;
-    const lengthText = formatLength(rollLength);
-    
+
     let shippingMemo = '';
-    if (isPet) {
-      // 애견 롤매트 배송메모: 폭별로 재단 요청 명기
-      if (solutions.length > 0) {
-        const cutRequestList = solutions.map(sol => {
-          const meters = formatLength(rollLength);
-          const totalRolls = sol.count * splitCount;
-          const rollText = splitCount > 1 ? `${totalRolls}롤` : `${sol.count}롤`;
-          return `${sol.width}cm 폭 ${meters} ${rollText}`;
-        });
-        shippingMemo = `배송메모(재단요청): ${cutRequestList.join(', ')}으로 재단`;
-        breakdown.push(shippingMemo);
-      }
+    if (isPet && solutions.length > 0) {
+      const cutRequestList = solutions.map(sol => {
+        const meters = formatLength(rollLength);
+        const totalRollsPerWidth = sol.count * splitCount;
+        const rollText = splitCount > 1 ? `${totalRollsPerWidth}롤` : `${sol.count}롤`;
+        return `${sol.width}cm 폭 ${meters} ${rollText}`;
+      });
+      shippingMemo = `배송메모(재단요청): ${cutRequestList.join(', ')}으로 재단`;
+      breakdown.push(shippingMemo);
     }
 
     const rollLabel = isPet ? '애견 롤매트' : '유아 롤매트';
 
-    // 6-A. 대안 옵션 표시: 선택되지 않은 다른 모드 해를 함께 제안
-    const alternativeLines = [];
-    const otherSolutions = (solutions === exactSolutions) ? looseSolutions : exactSolutions;
-    if (otherSolutions) {
-      let altPrice = 0;
-      otherSolutions.forEach(sol => {
-        const pricePerUnit = ROLL_PRICES[thickness][sol.width];
-        const price = pricePerUnit * lengthIn50cm * sol.count * splitCount;
-        altPrice += price;
-      });
-
-      const otherUsedWidth = otherSolutions.reduce((s, x) => s + x.width * x.count, 0);
-      const overWidth = Math.max(0, otherUsedWidth - targetWidth);
-      const rollText = splitCount > 1 ? `${splitCount}롤` : `${otherSolutions.reduce((s, x) => s + x.count, 0)}개`;
-
-      // 구성 문자열 생성
-      const comboText = otherSolutions.map(sol => `${sol.width}cm 폭 × ${rollLength}cm 길이 × ${splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`}`).join(' + ');
-      const diff = altPrice - totalPrice;
-      const priceDiffText = diff === 0 ? '' : (diff > 0 ? ` (+${KRW.format(diff)})` : ` (${KRW.format(diff)})`);
-
-      alternativeLines.push(`대안 옵션(고객 선호): ${getThicknessLabel()} - ${comboText} = ${KRW.format(altPrice)}${priceDiffText}`);
-      if (widthAxis === 'width' && overWidth > 0) {
-        alternativeLines.push(`안내: 가로로 ${overWidth}cm 재단이 필요합니다.`);
-      }
-    }
-
-    // 6-B. 보완 옵션 계산 제거: 기본 결과만 표시
     const complementLines = [];
 
     return {
@@ -699,9 +695,10 @@
   }
 
   // 최적의 롤매트 폭 조합 찾기
-  function findBestRollWidthCombination(targetWidth, mode, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
+  function generateRollWidthCombinations(targetWidth, mode, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
+    const thickness = parseInt(currentThickness);
     const availableWidths = getAvailableRollWidths();
-    const allCombinations = [];
+    const combinations = [];
 
     // 1. 모든 가능한 단일 폭 조합
     for (let width of availableWidths) {
@@ -709,40 +706,40 @@
         const totalWidth = width * count;
 
         if (mode === 'exact') {
-          // 정확히 맞추기: targetWidth 이상, 과충족은 exactOverageCap 이내
           if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
             const waste = totalWidth - targetWidth;
             const wastePercent = (waste / totalWidth) * 100;
 
-            allCombinations.push({
+            combinations.push({
+              mode,
               solutions: [{ width, count }],
               totalWidth,
               waste,
               wastePercent,
               rollCount: count,
-              priority: ROLL_WIDTH_PRIORITY[width] || 2,
+              priority: getRollWidthPriority(width, thickness),
               sameWidth: true
             });
 
             break; // 더 많은 개수는 불필요
           }
         } else {
-          // 여유있게 깔기: targetWidth 이하
           if (totalWidth <= targetWidth) {
             const shortage = targetWidth - totalWidth;
             const shortagePercent = (shortage / targetWidth) * 100;
 
-            allCombinations.push({
+            combinations.push({
+              mode,
               solutions: [{ width, count }],
               totalWidth,
-              waste: -shortage,  // 음수로 표시
+              waste: -shortage,
               wastePercent: -shortagePercent,
               rollCount: count,
-              priority: ROLL_WIDTH_PRIORITY[width] || 2,
+              priority: getRollWidthPriority(width, thickness),
               sameWidth: true
             });
           } else {
-            break; // 초과하면 중단
+            break;
           }
         }
       }
@@ -765,9 +762,10 @@
             if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
               const waste = totalWidth - targetWidth;
               const wastePercent = (waste / totalWidth) * 100;
-              const avgPriority = ((ROLL_WIDTH_PRIORITY[w1] || 2) + (ROLL_WIDTH_PRIORITY[w2] || 2)) / 2;
+              const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
 
-              allCombinations.push({
+              combinations.push({
+                mode,
                 solutions: [
                   { width: w1, count: count1 },
                   { width: w2, count: count2 }
@@ -784,9 +782,10 @@
             if (totalWidth <= targetWidth) {
               const shortage = targetWidth - totalWidth;
               const shortagePercent = (shortage / targetWidth) * 100;
-              const avgPriority = ((ROLL_WIDTH_PRIORITY[w1] || 2) + (ROLL_WIDTH_PRIORITY[w2] || 2)) / 2;
+              const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
 
-              allCombinations.push({
+              combinations.push({
+                mode,
                 solutions: [
                   { width: w1, count: count1 },
                   { width: w2, count: count2 }
@@ -804,39 +803,26 @@
       }
     }
 
-    if (allCombinations.length === 0) {
-      return null;
-    }
+    combinations.sort((a, b) => {
+      const wasteA = Math.abs(a.wastePercent ?? 0);
+      const wasteB = Math.abs(b.wastePercent ?? 0);
 
-    // 정렬 기준:
-    // 1) 낭비율 절대값이 작을수록 좋음
-    // 2) 동일 폭 우선
-    // 3) 우선순위 높은 폭
-    // 4) 롤 개수 적을수록 좋음
-    allCombinations.sort((a, b) => {
-      // 낭비율 비교
-      const wasteA = Math.abs(a.wastePercent);
-      const wasteB = Math.abs(b.wastePercent);
-
-      if (Math.abs(wasteA - wasteB) > 5) {  // 5% 이상 차이나면 낭비율 우선
+      if (Math.abs(wasteA - wasteB) > 5) {
         return wasteA - wasteB;
       }
 
-      // 낭비율이 비슷하면 동일 폭 우선
       if (a.sameWidth !== b.sameWidth) {
         return b.sameWidth - a.sameWidth;
       }
 
-      // 우선순위 비교
       if (a.priority !== b.priority) {
         return a.priority - b.priority;
       }
 
-      // 롤 개수 비교
-      return a.rollCount - b.rollCount;
+      return (a.rollCount || 0) - (b.rollCount || 0);
     });
 
-    return allCombinations[0].solutions;
+    return combinations;
   }
 
   // 복합 매트 최적화 계산 (100cm 우선, 나머지 50cm 4장 세트)
@@ -996,7 +982,7 @@
         // 재단/여유 안내 통계
         if (result.fitMessages && result.fitMessages.length > 0) {
           const hasTrim = result.fitMessages.some(msg => msg.includes('재단이 필요'));
-          const hasGap = result.fitMessages.some(msg => msg.includes('공간이 남습니다'));
+          const hasGap = result.fitMessages.some(msg => msg.includes('매트가 부족합니다'));
           if (hasTrim) spacesNeedingTrim += 1;
           if (hasGap) spacesWithGap += 1;
         }
@@ -1054,9 +1040,12 @@
             }
           });
         }
+        if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
+          totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 10px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.</div>`;
+        }
         // 재단/여유 안내 메시지 표시 (작은 글씨)
         if (r.fitMessages && r.fitMessages.length > 0) {
-          totalCompositionHTML += `<div style="margin-top: 10px;"></div>`;
+          totalCompositionHTML += `<div style="margin-top: 6px;"></div>`;
           r.fitMessages.forEach(msg => {
             totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
           });
@@ -1065,6 +1054,9 @@
           totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
       });
+      if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+        totalCompositionHTML += `<div style="margin-top: 12px; color: #94a3b8; font-size: 12px;">제품 출고 시 온도차에 의한 수축과 재단 과정의 오차를 고려해 여분을 두고 출고합니다.</div>`;
+      }
     } else {
       totalCompositionHTML = '-';
     }
@@ -1113,9 +1105,12 @@
 
     text += '[ 제품 정보 ]\n';
     text += `제품: ${productInfo.name} - ${getThicknessLabel()}\n`;
-    // 퍼즐매트만 계산방식 표시
+    // 퍼즐매트만 계산방식 표시 및 마감재 안내 추가
     if (currentProduct === 'puzzle') {
       text += `계산방식: ${calcModeText}\n`;
+    }
+    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      text += '제품 출고 시 온도차에 의한 수축, 재단 과정에서의 오차를 고려해 여분을 두고 출고합니다.\n';
     }
     text += '\n';
 
@@ -1133,6 +1128,9 @@
             text += `  ${line}\n`;
           }
         });
+      }
+      if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
+        text += `  매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.\n`;
       }
       // 재단/여유 안내 메시지
       if (r.fitMessages && r.fitMessages.length > 0) {
