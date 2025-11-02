@@ -314,62 +314,76 @@ button {
   .product-image-wrapper {
     width: 100%;
   }
+  .action-buttons {
+    flex-wrap: wrap;
+  }
+  .action-btn {
+    min-width: calc(50% - 5px);
+  }
 }
 
 .price-highlight { font-size: 16px; color: #1e293b; }
 
 .space-visual-wrapper {
-  margin-left: 15px;
-  margin-top: 12px;
-  padding: 12px 0 4px;
+  margin: 18px 0 0;
 }
 
 .space-visual {
   --grid-size-small: 20px;
   --grid-size-large: 80px;
   position: relative;
-  width: 100%;
-  max-width: 100%;
-  aspect-ratio: 1 / 1;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  background-color: #ffffff;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.6);
+}
+
+.space-visual-canvas {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #d4dae4;
+  background-color: #f8fafc;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .space-visual-svg {
+  display: block;
   width: 100%;
   height: 100%;
 }
 
 .space-visual-name {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #475569;
-  padding: 6px 12px;
-  border-radius: 8px;
+  align-self: flex-start;
+  color: #1f2933;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.4;
-  backdrop-filter: blur(4px);
+  padding: 4px 0;
+}
+
+.space-visual-info,
+.space-visual-composition {
+  position: static;
+  background: #ffffff;
+  color: #475569;
+  border-radius: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: none;
 }
 
 .space-visual-info {
-  position: absolute;
-  bottom: 14px;
-  left: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  color: #475569;
-  padding: 0;
-  font-size: 12px;
-  line-height: 1.4;
+  display: grid;
+  gap: 6px;
+  padding-top: 4px;
 }
 
 .space-visual-dim {
@@ -395,11 +409,40 @@ button {
   background: #60a5fa;
 }
 
-/* 확대 버튼 */
-.expand-canvas-btn {
+.space-visual-composition {
+  max-height: 200px;
+  overflow-y: auto;
+  padding-top: 8px;
+}
+
+.space-visual-composition::-webkit-scrollbar {
+  width: 6px;
+}
+
+.space-visual-composition::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 999px;
+}
+
+.space-visual-composition-line {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.space-visual-composition-line:last-child {
+  margin-bottom: 0;
+}
+
+.space-visual-composition-gap {
+  height: 8px;
+}
+
+/* 다운로드 버튼 */
+.download-canvas-btn {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -414,134 +457,9 @@ button {
   backdrop-filter: blur(4px);
 }
 
-.expand-canvas-btn:hover {
+.download-canvas-btn:hover {
   background: #eef2ff;
   transform: scale(1.05);
-}
-
-/* 시각화 모달 */
-.visualization-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: modalFadeIn 0.2s ease-out;
-}
-
-.visualization-modal.closing {
-  animation: modalFadeOut 0.2s ease-in;
-}
-
-@keyframes modalFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes modalFadeOut {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-.visualization-modal-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
-}
-
-.visualization-modal-content {
-  position: relative;
-  width: 80vw;
-  height: 80vh;
-  max-width: 1100px;
-  max-height: 1100px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.visualization-modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #0f172a;
-  border: 1px solid #e2e8f0;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  backdrop-filter: blur(4px);
-}
-
-.visualization-modal-close svg {
-  display: block;
-  stroke: #0f172a;
-}
-
-.visualization-modal-close:hover {
-  background: #fee2e2;
-  color: #b91c1c;
-  border-color: #fecaca;
-  transform: rotate(90deg);
-}
-
-.visualization-modal-close:hover svg {
-  stroke: #b91c1c;
-}
-
-.visualization-modal-canvas {
-  flex: 1;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 80px;
-  overflow: auto;
-}
-
-.visualization-modal-canvas .space-visual-name {
-  font-size: 16px;
-  padding: 10px 18px;
-}
-
-.visualization-modal-canvas .space-visual-info {
-  font-size: 14px;
-}
-
-@media (max-width: 720px) {
-  .visualization-modal-content {
-    width: 95vw;
-    height: 95vh;
-  }
-
-  .visualization-modal-canvas {
-    padding: 30px;
-  }
 }
 
 /* 위치 조정 버튼 hover 효과 */
@@ -578,4 +496,3 @@ button {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
 }
-

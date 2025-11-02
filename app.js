@@ -3,6 +3,7 @@
 
   const $addSpace = document.getElementById('add-space');
   const $copyEstimate = document.getElementById('copy-estimate');
+  const $copyQuickEstimate = document.getElementById('copy-quick-estimate');
   const $purchaseLink = document.getElementById('purchase-link');
   const $spacesContainer = document.getElementById('spaces-container');
   const $totalSummary = document.getElementById('total-summary');
@@ -320,6 +321,8 @@
   let spaceCounter = 0;
   const spaces = [];
   let lastCalculationResults = [];  // 마지막 계산 결과 저장
+  let copySuccessTimeout = null;  // 견적서 복사 버튼 타임아웃
+  let quickCopySuccessTimeout = null;  // 간편견적 복사 버튼 타임아웃
 
   let currentProduct = 'puzzle';
   let currentThickness = '25';  // 기본 두께
@@ -1836,6 +1839,71 @@
   }
 
 
+  function buildSpaceQuickSummary(result, idx) {
+    const spaceName = result.name || `공간 ${idx + 1}`;
+    const width = Number.isFinite(result.width) ? result.width : null;
+    const height = Number.isFinite(result.height) ? result.height : null;
+    const summary = {
+      name: spaceName,
+      dimensions: width !== null && height !== null ? `${width}cm × ${height}cm` : null,
+      lines: []
+    };
+
+    if (result.pieceDetails && result.pieceDetails.length > 0 && result.breakdown && Array.isArray(result.breakdown)) {
+      const pieceBreakdowns = {};
+      result.breakdown.forEach(line => {
+        const match = line.match(/^\[(.+?)\]\s*(.+)$/);
+        if (match) {
+          const [, pieceName, content] = match;
+          if (!pieceBreakdowns[pieceName]) {
+            pieceBreakdowns[pieceName] = [];
+          }
+          pieceBreakdowns[pieceName].push(content);
+        }
+      });
+
+      result.pieceDetails.forEach((piece, pieceIdx) => {
+        const pieceLines = pieceBreakdowns[piece.name];
+        if (pieceLines && pieceLines.length > 0) {
+          pieceLines.forEach(content => {
+            summary.lines.push(`[${piece.name}] ${content}`);
+          });
+          if (pieceIdx < result.pieceDetails.length - 1) {
+            summary.lines.push('');
+          }
+        }
+      });
+    } else if (result.breakdown && Array.isArray(result.breakdown) && result.breakdown.length > 0) {
+      result.breakdown.forEach(line => {
+        if (typeof line === 'string') {
+          if (line.includes('배송메모')) {
+            if (summary.lines.length > 0 && summary.lines[summary.lines.length - 1] !== '') {
+              summary.lines.push('');
+            }
+            summary.lines.push(line);
+          } else {
+            summary.lines.push(line);
+          }
+        }
+      });
+    }
+    
+    // breakdown이 없을 때도 기본 정보 추가
+    if (summary.lines.length === 0) {
+      if (result.type) {
+        summary.lines.push(result.type);
+      } else if (result.spaceType === 'roll' || result.spaceType === 'petRoll') {
+        summary.lines.push(`롤매트 - ${getThicknessLabel()}`);
+      } else if (result.spaceType === 'hybrid') {
+        summary.lines.push(`복합 매트 - ${getThicknessLabel()}`);
+      } else {
+        summary.lines.push('견적 정보 없음');
+      }
+    }
+
+    return summary;
+  }
+
   // 견적서 텍스트 생성 함수
   function generateEstimateText() {
     if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
@@ -1963,7 +2031,7 @@
   }
 
   // 복합 공간 시각화 렌더링
-  function renderComplexSpaceVisualization(container, vis, result) {
+  function renderComplexSpaceVisualization(container, vis, result, spaceIdx) {
     const { pieces, space, coverage, tiles } = vis;
     const baseWidth = Math.max(space.width, 1);
     const baseHeight = Math.max(space.height, 1);
@@ -1975,9 +2043,22 @@
     container.innerHTML = '';
     container.style.display = 'block';
 
+    // 공간 비율에 맞게 컨테이너 aspect-ratio 설정
+    const aspectRatio = viewBoxWidth / viewBoxHeight;
+    container.style.aspectRatio = `${aspectRatio}`;
+
     const rect = container.getBoundingClientRect();
     const containerSize = rect.width || rect.height || container.clientWidth;
-    if (!containerSize) return;
+    if (!containerSize) {
+      if (!container.dataset.deferScheduled) {
+        container.dataset.deferScheduled = '1';
+        requestAnimationFrame(() => {
+          renderComplexSpaceVisualization(container, vis, result, spaceIdx);
+        });
+      }
+      return;
+    }
+    delete container.dataset.deferScheduled;
 
     const scale = containerSize / Math.max(viewBoxWidth, viewBoxHeight);
     const gridMinor = vis.gridMinor || 10;
@@ -2103,26 +2184,60 @@
 
     container.appendChild(svg);
 
-    // 공간명 레이블
-    const spaceName = result.name || `공간 ${result.index}`;
+    const summary = buildSpaceQuickSummary(result, spaceIdx || 0);
+
     const spaceNameDiv = document.createElement('div');
     spaceNameDiv.className = 'space-visual-name';
-    spaceNameDiv.textContent = spaceName;
+    spaceNameDiv.textContent = summary.name;
     container.appendChild(spaceNameDiv);
 
-    // 정보 레이블
-    const info = document.createElement('div');
-    info.className = 'space-visual-info';
-    info.innerHTML = `
-      <div class="space-visual-dim coverage">매트 ${coverage.width}cm × ${coverage.height}cm</div>
+    const infoLines = [];
+    if (summary.dimensions) {
+      infoLines.push(`<div class="space-visual-dim space">공간 ${summary.dimensions}</div>`);
+    }
+    if (Number.isFinite(coverage.width) && Number.isFinite(coverage.height)) {
+      infoLines.push(`<div class="space-visual-dim coverage">매트 ${coverage.width}cm × ${coverage.height}cm</div>`);
+    }
+    if (infoLines.length > 0) {
+      const info = document.createElement('div');
+      info.className = 'space-visual-info';
+      info.innerHTML = infoLines.join('');
+      container.appendChild(info);
+    }
+
+    const downloadBtn = document.createElement('button');
+    downloadBtn.className = 'download-canvas-btn';
+    downloadBtn.title = '이미지 다운로드';
+    downloadBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
     `;
-    container.appendChild(info);
+    downloadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      downloadSpaceVisualization(container, summary.name);
+    });
+    container.appendChild(downloadBtn);
+
+    if (summary.lines.length > 0) {
+      const compositionInfo = document.createElement('div');
+      compositionInfo.className = 'space-visual-composition';
+      compositionInfo.innerHTML = summary.lines.map(line => {
+        if (line === '') {
+          return '<div class="space-visual-composition-gap"></div>';
+        }
+        return `<div class="space-visual-composition-line">${line}</div>`;
+      }).join('');
+      container.appendChild(compositionInfo);
+    }
   }
 
   function renderSpaceVisualizations(spaceResults) {
-    if (!spaceResults || spaceResults.length === 0) return;
+    if (!Array.isArray(spaceResults) || spaceResults.length === 0) return;
 
-    spaceResults.forEach(result => {
+    spaceResults.forEach((result, idx) => {
       const container = document.querySelector(`[data-space-visual-id="${result.index}"]`);
       if (!container) return;
 
@@ -2132,9 +2247,8 @@
         return;
       }
 
-      // 복합 공간 처리
       if (vis.type === 'complex') {
-        renderComplexSpaceVisualization(container, vis, result);
+        renderComplexSpaceVisualization(container, vis, result, idx);
         return;
       }
 
@@ -2145,14 +2259,13 @@
       const baseWidth = Math.max(spaceWidth, coverageWidth);
       const baseHeight = Math.max(spaceHeight, coverageHeight);
 
-      // 여백 추가 (좌우상하 각 15% 여백)
       const padding = Math.max(baseWidth, baseHeight) * 0.15;
       const viewBoxWidth = baseWidth + padding * 2;
       const viewBoxHeight = baseHeight + padding * 2;
 
       container.innerHTML = '';
       container.style.display = 'block';
-      container.dataset.deferRender = '';
+      container.style.aspectRatio = `${viewBoxWidth / viewBoxHeight}`;
 
       const rect = container.getBoundingClientRect();
       const containerSize = rect.width || rect.height || container.clientWidth;
@@ -2163,7 +2276,6 @@
         }
         return;
       }
-
       delete container.dataset.deferScheduled;
 
       const scale = containerSize / Math.max(viewBoxWidth, viewBoxHeight);
@@ -2179,11 +2291,8 @@
       svg.setAttribute('class', 'space-visual-svg');
       svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
 
-      // 격자선 그리기 (매트 영역 기준)
       const gridGroup = document.createElementNS(SVG_NS, 'g');
       gridGroup.setAttribute('opacity', '0.3');
-
-      // 세로 격자선 (Minor grid - 10cm)
       for (let x = 0; x <= baseWidth; x += gridMinor) {
         const line = document.createElementNS(SVG_NS, 'line');
         line.setAttribute('x1', x);
@@ -2194,8 +2303,6 @@
         line.setAttribute('stroke-width', x % gridMajor === 0 ? 0.8 : 0.3);
         gridGroup.appendChild(line);
       }
-
-      // 가로 격자선 (Minor grid - 10cm)
       for (let y = 0; y <= baseHeight; y += gridMinor) {
         const line = document.createElementNS(SVG_NS, 'line');
         line.setAttribute('x1', 0);
@@ -2206,7 +2313,6 @@
         line.setAttribute('stroke-width', y % gridMajor === 0 ? 0.8 : 0.3);
         gridGroup.appendChild(line);
       }
-
       svg.appendChild(gridGroup);
 
       const spaceRect = document.createElementNS(SVG_NS, 'rect');
@@ -2230,94 +2336,76 @@
       svg.appendChild(coverageRect);
 
       if (vis.type === 'puzzle' && Array.isArray(vis.tiles)) {
-        vis.tiles.forEach((tile, idx) => {
+        vis.tiles.forEach((tile, tileIdx) => {
           const tileRect = document.createElementNS(SVG_NS, 'rect');
           tileRect.setAttribute('x', tile.x);
           tileRect.setAttribute('y', tile.y);
           tileRect.setAttribute('width', tile.width);
           tileRect.setAttribute('height', tile.height);
-
-          // 100cm 타일과 50cm 타일을 다른 색상으로 표시
           if (tile.size === 100) {
             tileRect.setAttribute('fill', 'rgba(37, 99, 235, 0.6)');
             tileRect.setAttribute('stroke', '#1e40af');
             tileRect.setAttribute('stroke-width', 1.2);
           } else {
-            tileRect.setAttribute('fill', idx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
+            tileRect.setAttribute('fill', tileIdx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
             tileRect.setAttribute('stroke', '#1d4ed8');
             tileRect.setAttribute('stroke-width', 0.6);
           }
-
           svg.appendChild(tileRect);
-
-          // 타일 중앙에 사이즈 표기 (충분히 큰 타일에만)
           if (tile.width >= 30 && tile.height >= 30) {
-            const centerX = tile.x + tile.width / 2;
-            const centerY = tile.y + tile.height / 2;
-            const tileLabel = document.createElementNS(SVG_NS, 'text');
-            tileLabel.setAttribute('x', centerX);
-            tileLabel.setAttribute('y', centerY);
-            tileLabel.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
-            tileLabel.setAttribute('fill', '#ffffff');
-            tileLabel.setAttribute('font-weight', '500');
-            tileLabel.setAttribute('text-anchor', 'middle');
-            tileLabel.setAttribute('dominant-baseline', 'middle');
-            tileLabel.textContent = `${tile.width}×${tile.height}cm`;
-            svg.appendChild(tileLabel);
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', tile.x + tile.width / 2);
+            label.setAttribute('y', tile.y + tile.height / 2);
+            label.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
+            label.setAttribute('fill', '#ffffff');
+            label.setAttribute('font-weight', '500');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('dominant-baseline', 'middle');
+            label.textContent = `${tile.width}×${tile.height}cm`;
+            svg.appendChild(label);
           }
         });
       } else if (vis.type === 'roll' && Array.isArray(vis.stripes)) {
         const colors = ['rgba(59, 130, 246, 0.55)', 'rgba(37, 99, 235, 0.55)', 'rgba(96, 165, 250, 0.55)'];
-        vis.stripes.forEach((strip, idx) => {
+        vis.stripes.forEach((strip, stripIdx) => {
           const stripRect = document.createElementNS(SVG_NS, 'rect');
           stripRect.setAttribute('x', strip.x);
           stripRect.setAttribute('y', strip.y);
           stripRect.setAttribute('width', strip.width);
           stripRect.setAttribute('height', strip.height);
-          stripRect.setAttribute('fill', colors[idx % colors.length]);
+          stripRect.setAttribute('fill', colors[stripIdx % colors.length]);
           stripRect.setAttribute('stroke', '#1d4ed8');
           stripRect.setAttribute('stroke-width', 0.8);
           svg.appendChild(stripRect);
-
-          // 스트라이프 중앙에 사이즈 표기 (충분히 큰 영역에만)
           const minDimension = Math.min(strip.width, strip.height);
           if (minDimension >= 20) {
-            const centerX = strip.x + strip.width / 2;
-            const centerY = strip.y + strip.height / 2;
-            const stripLabel = document.createElementNS(SVG_NS, 'text');
-            stripLabel.setAttribute('x', centerX);
-            stripLabel.setAttribute('y', centerY);
-            stripLabel.setAttribute('font-size', minDimension * 0.1);
-            stripLabel.setAttribute('fill', '#ffffff');
-            stripLabel.setAttribute('font-weight', '500');
-            stripLabel.setAttribute('text-anchor', 'middle');
-            stripLabel.setAttribute('dominant-baseline', 'middle');
-            stripLabel.textContent = `${strip.width}×${strip.height}cm`;
-            svg.appendChild(stripLabel);
+            const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('x', strip.x + strip.width / 2);
+            label.setAttribute('y', strip.y + strip.height / 2);
+            label.setAttribute('font-size', minDimension * 0.1);
+            label.setAttribute('fill', '#ffffff');
+            label.setAttribute('font-weight', '500');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('dominant-baseline', 'middle');
+            label.textContent = `${strip.width}×${strip.height}cm`;
+            svg.appendChild(label);
           }
         });
       }
 
-      // 격자 수치 레이블 추가 (왼쪽과 상단)
-      const maxDimension = Math.max(baseWidth, baseHeight);
-      const fontSize = Math.max(3, maxDimension * 0.015); // 동적 폰트 크기
-      const labelOffset = fontSize * 0.3; // 레이블 간격
-
-      // 상단 가로 레이블 (50cm 간격)
+      const fontSize = Math.max(3, Math.max(baseWidth, baseHeight) * 0.015);
+      const labelOffset = fontSize * 0.3;
       for (let x = 0; x <= baseWidth; x += gridMajor) {
-        if (x === 0) continue; // 0cm은 왼쪽 세로 레이블에서만 표시
+        if (x === 0) continue;
         const labelText = document.createElementNS(SVG_NS, 'text');
         labelText.setAttribute('x', x);
         labelText.setAttribute('y', -labelOffset);
         labelText.setAttribute('font-size', fontSize);
         labelText.setAttribute('fill', '#64748b');
         labelText.setAttribute('text-anchor', 'middle');
-        labelText.setAttribute('dominant-baseline', 'bottom');
         labelText.textContent = `${x}cm`;
         svg.appendChild(labelText);
       }
-
-      // 왼쪽 세로 레이블 (50cm 간격)
       for (let y = 0; y <= baseHeight; y += gridMajor) {
         const labelText = document.createElementNS(SVG_NS, 'text');
         labelText.setAttribute('x', -labelOffset);
@@ -2332,275 +2420,76 @@
 
       container.appendChild(svg);
 
-      // 공간명 레이블 (좌측 상단 - 절대 위치)
-      const spaceName = result.name || `공간 ${result.index}`;
+      const summary = buildSpaceQuickSummary(result, idx);
       const spaceNameDiv = document.createElement('div');
       spaceNameDiv.className = 'space-visual-name';
-      spaceNameDiv.textContent = spaceName;
+      spaceNameDiv.textContent = summary.name;
       container.appendChild(spaceNameDiv);
 
-      // 확대 버튼 (우측 상단 - 절대 위치)
-      const expandBtn = document.createElement('button');
-      expandBtn.className = 'expand-canvas-btn';
-      expandBtn.title = '확대하기';
-      expandBtn.innerHTML = `
+      const infoLines = [];
+      if (summary.dimensions) {
+        infoLines.push(`<div class="space-visual-dim space">공간 ${summary.dimensions}</div>`);
+      }
+      if (Number.isFinite(coverageWidth) && Number.isFinite(coverageHeight)) {
+        infoLines.push(`<div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>`);
+      }
+      if (infoLines.length > 0) {
+        const info = document.createElement('div');
+        info.className = 'space-visual-info';
+        info.innerHTML = infoLines.join('');
+        container.appendChild(info);
+      }
+
+      const downloadBtn = document.createElement('button');
+      downloadBtn.className = 'download-canvas-btn';
+      downloadBtn.title = '이미지 다운로드';
+      downloadBtn.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="15 3 21 3 21 9"></polyline>
-          <polyline points="9 21 3 21 3 15"></polyline>
-          <line x1="21" y1="3" x2="14" y2="10"></line>
-          <line x1="3" y1="21" x2="10" y2="14"></line>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
       `;
-      expandBtn.addEventListener('click', () => {
-        // 모달 생성
-        const modal = document.createElement('div');
-        modal.className = 'visualization-modal';
-        modal.innerHTML = `
-          <div class="visualization-modal-backdrop"></div>
-          <div class="visualization-modal-content">
-            <button class="visualization-modal-close" title="닫기">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
-            <div class="visualization-modal-canvas"></div>
-          </div>
-        `;
-        document.body.appendChild(modal);
-
-        // 닫기 기능
-        const closeModal = () => {
-          modal.classList.add('closing');
-          setTimeout(() => {
-            document.body.removeChild(modal);
-          }, 200);
-        };
-
-        modal.querySelector('.visualization-modal-close').addEventListener('click', closeModal);
-        modal.querySelector('.visualization-modal-backdrop').addEventListener('click', closeModal);
-
-        // ESC 키로 닫기
-        const handleEsc = (e) => {
-          if (e.key === 'Escape') {
-            closeModal();
-            document.removeEventListener('keydown', handleEsc);
-          }
-        };
-        document.addEventListener('keydown', handleEsc);
-
-        // 모달에 시각화 렌더링
-        setTimeout(() => {
-          renderSpaceVisualizationInModal(result, modal.querySelector('.visualization-modal-canvas'));
-        }, 50);
+      downloadBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        downloadSpaceVisualization(container, summary.name);
       });
-      container.appendChild(expandBtn);
+      container.appendChild(downloadBtn);
 
-      const info = document.createElement('div');
-      info.className = 'space-visual-info';
-      info.innerHTML = `
-        <div class="space-visual-dim space">공간 ${spaceWidth}cm × ${spaceHeight}cm</div>
-        <div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>
-      `;
-      container.appendChild(info);
+      if (summary.lines.length > 0) {
+        const compositionInfo = document.createElement('div');
+        compositionInfo.className = 'space-visual-composition';
+        compositionInfo.innerHTML = summary.lines.map(line => {
+          if (line === '') {
+            return '<div class="space-visual-composition-gap"></div>';
+          }
+          return `<div class="space-visual-composition-line">${line}</div>`;
+        }).join('');
+        container.appendChild(compositionInfo);
+      }
     });
   }
-
-  function renderSpaceVisualizationInModal(result, container) {
-    if (!container || !result) return;
-
-    const vis = result.visualization;
-    if (!vis) return;
-
-    const spaceWidth = Math.max(vis.space.width, 1);
-    const spaceHeight = Math.max(vis.space.height, 1);
-    const coverageWidth = Math.max(vis.coverage.width, 1);
-    const coverageHeight = Math.max(vis.coverage.height, 1);
-    const baseWidth = Math.max(spaceWidth, coverageWidth);
-    const baseHeight = Math.max(spaceHeight, coverageHeight);
-
-    // 여백 추가 (좌우상하 각 20% 여백)
-    const padding = Math.max(baseWidth, baseHeight) * 0.2;
-    const viewBoxWidth = baseWidth + padding * 2;
-    const viewBoxHeight = baseHeight + padding * 2;
-
-    const gridMinor = vis.gridMinor || 10;
-    const gridMajor = vis.gridMajor || gridMinor * 5;
-
-    const svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('height', '100%');
-    svg.setAttribute('viewBox', `${-padding} ${-padding} ${viewBoxWidth} ${viewBoxHeight}`);
-    svg.setAttribute('class', 'space-visual-svg');
-    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-
-    // 격자선 그리기
-    const gridGroup = document.createElementNS(SVG_NS, 'g');
-    gridGroup.setAttribute('opacity', '0.3');
-
-    for (let x = 0; x <= baseWidth; x += gridMinor) {
-      const line = document.createElementNS(SVG_NS, 'line');
-      line.setAttribute('x1', x);
-      line.setAttribute('y1', 0);
-      line.setAttribute('x2', x);
-      line.setAttribute('y2', baseHeight);
-      line.setAttribute('stroke', '#94a3b8');
-      line.setAttribute('stroke-width', x % gridMajor === 0 ? 0.8 : 0.3);
-      gridGroup.appendChild(line);
-    }
-
-    for (let y = 0; y <= baseHeight; y += gridMinor) {
-      const line = document.createElementNS(SVG_NS, 'line');
-      line.setAttribute('x1', 0);
-      line.setAttribute('y1', y);
-      line.setAttribute('x2', baseWidth);
-      line.setAttribute('y2', y);
-      line.setAttribute('stroke', '#94a3b8');
-      line.setAttribute('stroke-width', y % gridMajor === 0 ? 0.8 : 0.3);
-      gridGroup.appendChild(line);
-    }
-
-    svg.appendChild(gridGroup);
-
-    // 공간 영역
-    const spaceRect = document.createElementNS(SVG_NS, 'rect');
-    spaceRect.setAttribute('x', 0);
-    spaceRect.setAttribute('y', 0);
-    spaceRect.setAttribute('width', spaceWidth);
-    spaceRect.setAttribute('height', spaceHeight);
-    spaceRect.setAttribute('fill', 'rgba(226, 232, 240, 0.35)');
-    spaceRect.setAttribute('stroke', '#94a3b8');
-    spaceRect.setAttribute('stroke-dasharray', '6 4');
-    svg.appendChild(spaceRect);
-
-    // 매트 영역
-    const coverageRect = document.createElementNS(SVG_NS, 'rect');
-    coverageRect.setAttribute('x', 0);
-    coverageRect.setAttribute('y', 0);
-    coverageRect.setAttribute('width', coverageWidth);
-    coverageRect.setAttribute('height', coverageHeight);
-    coverageRect.setAttribute('fill', 'rgba(37, 99, 235, 0.14)');
-    coverageRect.setAttribute('stroke', '#2563eb');
-    coverageRect.setAttribute('stroke-width', 1.2);
-    svg.appendChild(coverageRect);
-
-    // 타일 또는 스트라이프 렌더링
-    if (vis.type === 'puzzle' && Array.isArray(vis.tiles)) {
-      vis.tiles.forEach((tile, idx) => {
-        const tileRect = document.createElementNS(SVG_NS, 'rect');
-        tileRect.setAttribute('x', tile.x);
-        tileRect.setAttribute('y', tile.y);
-        tileRect.setAttribute('width', tile.width);
-        tileRect.setAttribute('height', tile.height);
-
-        if (tile.size === 100) {
-          tileRect.setAttribute('fill', 'rgba(37, 99, 235, 0.6)');
-          tileRect.setAttribute('stroke', '#1e40af');
-          tileRect.setAttribute('stroke-width', 1.2);
-        } else {
-          tileRect.setAttribute('fill', idx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
-          tileRect.setAttribute('stroke', '#1d4ed8');
-          tileRect.setAttribute('stroke-width', 0.6);
-        }
-
-        svg.appendChild(tileRect);
-
-        if (tile.width >= 30 && tile.height >= 30) {
-          const centerX = tile.x + tile.width / 2;
-          const centerY = tile.y + tile.height / 2;
-          const tileLabel = document.createElementNS(SVG_NS, 'text');
-          tileLabel.setAttribute('x', centerX);
-          tileLabel.setAttribute('y', centerY);
-          tileLabel.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
-          tileLabel.setAttribute('fill', '#ffffff');
-          tileLabel.setAttribute('font-weight', '500');
-          tileLabel.setAttribute('text-anchor', 'middle');
-          tileLabel.setAttribute('dominant-baseline', 'middle');
-          tileLabel.textContent = `${tile.width}×${tile.height}cm`;
-          svg.appendChild(tileLabel);
-        }
-      });
-    } else if (vis.type === 'roll' && Array.isArray(vis.stripes)) {
-      const colors = ['rgba(59, 130, 246, 0.55)', 'rgba(37, 99, 235, 0.55)', 'rgba(96, 165, 250, 0.55)'];
-      vis.stripes.forEach((strip, idx) => {
-        const stripRect = document.createElementNS(SVG_NS, 'rect');
-        stripRect.setAttribute('x', strip.x);
-        stripRect.setAttribute('y', strip.y);
-        stripRect.setAttribute('width', strip.width);
-        stripRect.setAttribute('height', strip.height);
-        stripRect.setAttribute('fill', colors[idx % colors.length]);
-        stripRect.setAttribute('stroke', '#1d4ed8');
-        stripRect.setAttribute('stroke-width', 0.8);
-        svg.appendChild(stripRect);
-
-        const minDimension = Math.min(strip.width, strip.height);
-        if (minDimension >= 20) {
-          const centerX = strip.x + strip.width / 2;
-          const centerY = strip.y + strip.height / 2;
-          const stripLabel = document.createElementNS(SVG_NS, 'text');
-          stripLabel.setAttribute('x', centerX);
-          stripLabel.setAttribute('y', centerY);
-          stripLabel.setAttribute('font-size', minDimension * 0.1);
-          stripLabel.setAttribute('fill', '#ffffff');
-          stripLabel.setAttribute('font-weight', '500');
-          stripLabel.setAttribute('text-anchor', 'middle');
-          stripLabel.setAttribute('dominant-baseline', 'middle');
-          stripLabel.textContent = `${strip.width}×${strip.height}cm`;
-          svg.appendChild(stripLabel);
-        }
-      });
-    }
-
-    // 격자 레이블
-    const maxDimension = Math.max(baseWidth, baseHeight);
-    const fontSize = Math.max(3, maxDimension * 0.015);
-    const labelOffset = fontSize * 0.3;
-
-    for (let x = 0; x <= baseWidth; x += gridMajor) {
-      if (x === 0) continue;
-      const labelText = document.createElementNS(SVG_NS, 'text');
-      labelText.setAttribute('x', x);
-      labelText.setAttribute('y', -labelOffset);
-      labelText.setAttribute('font-size', fontSize);
-      labelText.setAttribute('fill', '#64748b');
-      labelText.setAttribute('text-anchor', 'middle');
-      labelText.setAttribute('dominant-baseline', 'bottom');
-      labelText.textContent = `${x}cm`;
-      svg.appendChild(labelText);
-    }
-
-    for (let y = 0; y <= baseHeight; y += gridMajor) {
-      const labelText = document.createElementNS(SVG_NS, 'text');
-      labelText.setAttribute('x', -labelOffset);
-      labelText.setAttribute('y', y);
-      labelText.setAttribute('font-size', fontSize);
-      labelText.setAttribute('fill', '#64748b');
-      labelText.setAttribute('text-anchor', 'end');
-      labelText.setAttribute('dominant-baseline', 'middle');
-      labelText.textContent = `${y}cm`;
-      svg.appendChild(labelText);
-    }
-
-    container.appendChild(svg);
-
-    // 공간명 레이블
-    const spaceName = result.name || `공간 ${result.index}`;
-    const spaceNameDiv = document.createElement('div');
-    spaceNameDiv.className = 'space-visual-name';
-    spaceNameDiv.textContent = spaceName;
-    container.appendChild(spaceNameDiv);
-
-    // 정보 레이블
-    const info = document.createElement('div');
-    info.className = 'space-visual-info';
-    info.innerHTML = `
-      <div class="space-visual-dim space">공간 ${spaceWidth}cm × ${spaceHeight}cm</div>
-      <div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>
-    `;
-    container.appendChild(info);
+  function downloadSpaceVisualization(container, spaceName) {
+    // html2canvas로 전체 컨테이너를 이미지로 변환
+    html2canvas(container, {
+      backgroundColor: '#ffffff',
+      scale: 2, // 고해상도
+      logging: false,
+      useCORS: true
+    }).then(canvas => {
+      // PNG로 변환하여 다운로드
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${spaceName}_견적.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    });
   }
-
-  let copySuccessTimeout = null;
 
   // 복사 버튼 상태 초기화
   function resetCopyButton() {
@@ -2618,6 +2507,24 @@
     $copyEstimate.style.background = '';
     $copyEstimate.style.borderColor = '';
     $copyEstimate.style.color = '';
+  }
+
+  // 간편견적 복사 버튼 상태 초기화
+  function resetQuickCopyButton() {
+    if (quickCopySuccessTimeout) {
+      clearTimeout(quickCopySuccessTimeout);
+      quickCopySuccessTimeout = null;
+    }
+    $copyQuickEstimate.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      간편견적 복사
+    `;
+    $copyQuickEstimate.style.background = '';
+    $copyQuickEstimate.style.borderColor = '';
+    $copyQuickEstimate.style.color = '';
   }
 
   // 견적서 복사 함수
@@ -2639,6 +2546,97 @@
 
       copySuccessTimeout = setTimeout(() => {
         resetCopyButton();
+      }, 2000);
+    }).catch(err => {
+      alert('복사에 실패했습니다: ' + err);
+    });
+  }
+
+  // 간편견적 생성 함수
+  function generateQuickEstimateText() {
+    if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
+      return '견적 결과가 없습니다.';
+    }
+
+    const {
+      spaceResults,
+      total50,
+      total100,
+      totalPrice,
+      totalRolls,
+      totalRollUnits
+    } = lastCalculationResults;
+
+    const calcMode = getCalcMode();
+    const calcModeText = calcMode === 'exact' ? '정확히 맞추기' : '여유있게 깔기';
+    const productInfo = PRODUCTS[currentProduct];
+
+    let text = '<견적 산출 결과>\n\n';
+
+    text += '[견적내용]\n';
+    spaceResults.forEach((r, idx) => {
+      const summary = buildSpaceQuickSummary(r, idx);
+      const header = summary.dimensions ? `${summary.name} (${summary.dimensions})` : summary.name;
+      text += `\n${header}\n`;
+
+      if (summary.lines.length > 0) {
+        summary.lines.forEach(line => {
+          if (line === '') {
+            text += '\n';
+          } else {
+            text += `  ${line}\n`;
+          }
+        });
+      }
+
+      if (idx < spaceResults.length - 1) {
+        text += '\n────────────────────\n';
+      }
+    });
+
+    text += '\n\n[ 총 수량 및 가격 ]\n';
+    if (currentProduct === 'puzzle') {
+      const parts = [];
+      if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
+      if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
+      text += `수량 : ${parts.join(' / ')}\n`;
+    } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      if (currentProduct === 'petRoll') {
+        text += `수량 : ${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
+      } else {
+        text += `수량 : ${totalRolls}롤\n`;
+      }
+    }
+    text += `가격 : ${KRW.format(totalPrice)} (할인 미적용가)\n`;
+
+    text += '\n\n[유의사항]\n';
+    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      text += '- 온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
+    }
+    text += '- 견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.';
+
+    return text;
+  }
+
+  // 간편견적 복사 함수
+  function copyQuickEstimate() {
+    const text = generateQuickEstimateText();
+
+    // 클립보드에 복사
+    navigator.clipboard.writeText(text).then(() => {
+      // 성공 메시지
+      $copyQuickEstimate.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        복사 완료!
+      `;
+      $copyQuickEstimate.style.background = '#10b981';
+      $copyQuickEstimate.style.borderColor = '#10b981';
+      $copyQuickEstimate.style.color = '#fff';
+
+      quickCopySuccessTimeout = setTimeout(() => {
+        resetQuickCopyButton();
       }, 2000);
     }).catch(err => {
       alert('복사에 실패했습니다: ' + err);
@@ -2672,6 +2670,7 @@
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);
   $copyEstimate.addEventListener('click', copyEstimate);
+  $copyQuickEstimate.addEventListener('click', copyQuickEstimate);
 
   // 제품 탭 초기화
   initProductTabs();
