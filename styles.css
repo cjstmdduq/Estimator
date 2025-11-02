@@ -336,11 +336,8 @@ button {
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  border: 1px solid #cbd5e1;
-  border-radius: 16px;
   background: #ffffff;
   padding: 18px;
-  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.6);
 }
 
 .space-visual-canvas {
@@ -366,6 +363,11 @@ button {
   font-weight: 600;
   line-height: 1.4;
   padding: 4px 0;
+}
+
+.space-visual-name-dim {
+  color: #94a3b8;
+  font-weight: 400;
 }
 
 .space-visual-info,
@@ -410,18 +412,7 @@ button {
 }
 
 .space-visual-composition {
-  max-height: 200px;
-  overflow-y: auto;
   padding-top: 8px;
-}
-
-.space-visual-composition::-webkit-scrollbar {
-  width: 6px;
-}
-
-.space-visual-composition::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 999px;
 }
 
 .space-visual-composition-line {

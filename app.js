@@ -324,7 +324,7 @@
   let copySuccessTimeout = null;  // 견적서 복사 버튼 타임아웃
   let quickCopySuccessTimeout = null;  // 간편견적 복사 버튼 타임아웃
 
-  let currentProduct = 'puzzle';
+  let currentProduct = 'babyRoll';
   let currentThickness = '25';  // 기본 두께
 
   // 제품 정보 설정
@@ -1799,10 +1799,6 @@
             });
           }
         }
-        totalCompositionHTML += `
-          <div class="space-visual-wrapper">
-            <div class="space-visual" data-space-visual-id="${r.index}"></div>
-          </div>`;
         if (idx < spaceResults.length - 1) {
           totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
@@ -1814,6 +1810,18 @@
       totalCompositionHTML = '-';
     }
     $totalComposition.innerHTML = totalCompositionHTML;
+
+    // 기존 space-visual-wrapper 제거
+    const existingVisuals = $totalComposition.parentNode.querySelectorAll('.space-visual-wrapper');
+    existingVisuals.forEach(el => el.remove());
+
+    // space-visual을 total-composition 다음에 추가
+    spaceResults.forEach((r, idx) => {
+      const visualWrapper = document.createElement('div');
+      visualWrapper.className = 'space-visual-wrapper';
+      visualWrapper.innerHTML = `<div class="space-visual" data-space-visual-id="${r.index}"></div>`;
+      $totalComposition.parentNode.insertBefore(visualWrapper, $totalComposition.nextSibling);
+    });
 
     renderSpaceVisualizations(spaceResults);
 
@@ -1863,17 +1871,43 @@
       });
 
       result.pieceDetails.forEach((piece, pieceIdx) => {
+        // 조각 헤더 (이름과 크기)
+        summary.lines.push(`${piece.name} (${piece.width}cm × ${piece.height}cm)`);
+        summary.lines.push(''); // 빈 줄
+
+        // breakdown 정보
         const pieceLines = pieceBreakdowns[piece.name];
         if (pieceLines && pieceLines.length > 0) {
           pieceLines.forEach(content => {
-            summary.lines.push(`[${piece.name}] ${content}`);
+            summary.lines.push(content);
           });
-          if (pieceIdx < result.pieceDetails.length - 1) {
-            summary.lines.push('');
-          }
+        }
+
+        // 매트 크기 정보
+        if (Number.isFinite(piece.coverageWidth) && Number.isFinite(piece.coverageHeight)) {
+          summary.lines.push(`매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.`);
+        }
+
+        // 재단/여유 안내
+        if (piece.fitMessages && piece.fitMessages.length > 0) {
+          piece.fitMessages.forEach(msg => {
+            if (typeof msg === 'string' && !msg.includes('경고') && !msg.includes('경계선')) {
+              summary.lines.push(msg);
+            }
+          });
+        }
+
+        // 조각 간 구분 빈 줄 (마지막 조각이 아닐 때만)
+        if (pieceIdx < result.pieceDetails.length - 1) {
+          summary.lines.push('');
+          summary.lines.push(''); // 조각 사이 빈 줄 하나 더 추가
         }
       });
     } else if (result.breakdown && Array.isArray(result.breakdown) && result.breakdown.length > 0) {
+      // 빈 줄 추가 (조각 헤더와 breakdown 사이)
+      summary.lines.push('');
+
+      // breakdown 정보 추가
       result.breakdown.forEach(line => {
         if (typeof line === 'string') {
           if (line.includes('배송메모')) {
@@ -1886,6 +1920,20 @@
           }
         }
       });
+
+      // 매트 크기 정보
+      if (Number.isFinite(result.coverageWidth) && Number.isFinite(result.coverageHeight)) {
+        summary.lines.push(`매트의 크기는 총 ${result.coverageWidth}cm × ${result.coverageHeight}cm 입니다.`);
+      }
+
+      // 재단/여유 안내
+      if (result.fitMessages && Array.isArray(result.fitMessages) && result.fitMessages.length > 0) {
+        result.fitMessages.forEach(msg => {
+          if (typeof msg === 'string' && !msg.includes('경고') && !msg.includes('경계선')) {
+            summary.lines.push(msg);
+          }
+        });
+      }
     }
     
     // breakdown이 없을 때도 기본 정보 추가
@@ -2186,25 +2234,6 @@
 
     const summary = buildSpaceQuickSummary(result, spaceIdx || 0);
 
-    const spaceNameDiv = document.createElement('div');
-    spaceNameDiv.className = 'space-visual-name';
-    spaceNameDiv.textContent = summary.name;
-    container.appendChild(spaceNameDiv);
-
-    const infoLines = [];
-    if (summary.dimensions) {
-      infoLines.push(`<div class="space-visual-dim space">공간 ${summary.dimensions}</div>`);
-    }
-    if (Number.isFinite(coverage.width) && Number.isFinite(coverage.height)) {
-      infoLines.push(`<div class="space-visual-dim coverage">매트 ${coverage.width}cm × ${coverage.height}cm</div>`);
-    }
-    if (infoLines.length > 0) {
-      const info = document.createElement('div');
-      info.className = 'space-visual-info';
-      info.innerHTML = infoLines.join('');
-      container.appendChild(info);
-    }
-
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'download-canvas-btn';
     downloadBtn.title = '이미지 다운로드';
@@ -2220,18 +2249,6 @@
       downloadSpaceVisualization(container, summary.name);
     });
     container.appendChild(downloadBtn);
-
-    if (summary.lines.length > 0) {
-      const compositionInfo = document.createElement('div');
-      compositionInfo.className = 'space-visual-composition';
-      compositionInfo.innerHTML = summary.lines.map(line => {
-        if (line === '') {
-          return '<div class="space-visual-composition-gap"></div>';
-        }
-        return `<div class="space-visual-composition-line">${line}</div>`;
-      }).join('');
-      container.appendChild(compositionInfo);
-    }
   }
 
   function renderSpaceVisualizations(spaceResults) {
@@ -2421,24 +2438,6 @@
       container.appendChild(svg);
 
       const summary = buildSpaceQuickSummary(result, idx);
-      const spaceNameDiv = document.createElement('div');
-      spaceNameDiv.className = 'space-visual-name';
-      spaceNameDiv.textContent = summary.name;
-      container.appendChild(spaceNameDiv);
-
-      const infoLines = [];
-      if (summary.dimensions) {
-        infoLines.push(`<div class="space-visual-dim space">공간 ${summary.dimensions}</div>`);
-      }
-      if (Number.isFinite(coverageWidth) && Number.isFinite(coverageHeight)) {
-        infoLines.push(`<div class="space-visual-dim coverage">매트 ${coverageWidth}cm × ${coverageHeight}cm</div>`);
-      }
-      if (infoLines.length > 0) {
-        const info = document.createElement('div');
-        info.className = 'space-visual-info';
-        info.innerHTML = infoLines.join('');
-        container.appendChild(info);
-      }
 
       const downloadBtn = document.createElement('button');
       downloadBtn.className = 'download-canvas-btn';
@@ -2455,18 +2454,6 @@
         downloadSpaceVisualization(container, summary.name);
       });
       container.appendChild(downloadBtn);
-
-      if (summary.lines.length > 0) {
-        const compositionInfo = document.createElement('div');
-        compositionInfo.className = 'space-visual-composition';
-        compositionInfo.innerHTML = summary.lines.map(line => {
-          if (line === '') {
-            return '<div class="space-visual-composition-gap"></div>';
-          }
-          return `<div class="space-visual-composition-line">${line}</div>`;
-        }).join('');
-        container.appendChild(compositionInfo);
-      }
     });
   }
   function downloadSpaceVisualization(container, spaceName) {
@@ -2679,7 +2666,7 @@
   initCalcModeTabs();
 
   // 초기 제품 정보 로드
-  updateProductDisplay('puzzle');
+  updateProductDisplay('babyRoll');
 
   // 초기 공간 1개 추가
   addSpace();
