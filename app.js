@@ -3,11 +3,9 @@
 
   const $addSpace = document.getElementById('add-space');
   const $copyEstimate = document.getElementById('copy-estimate');
-  const $copyShippingMemo = document.getElementById('copy-shipping-memo');
   const $purchaseLink = document.getElementById('purchase-link');
   const $spacesContainer = document.getElementById('spaces-container');
-  const $totalPcs = document.getElementById('total-pcs');
-  const $totalPrice = document.getElementById('total-price');
+  const $totalSummary = document.getElementById('total-summary');
   const $totalComposition = document.getElementById('total-composition');
   const $calcModeSection = document.querySelector('.calc-mode-card') || document.querySelector('[data-calc-mode-section]');
 
@@ -204,31 +202,35 @@
     const offsetX = -minX;
     const offsetY = -minY;
 
-    // 각 조각별로 개별 계산하여 타일 생성
+    // 각 조각별로 개별 타일 생성 (각 조각의 0,0부터 시작)
     pieces.forEach((piece, pieceIdx) => {
+      // 각 조각의 실제 계산 결과를 구해서 타일 정보를 가져옴
       const pieceResult = calculateSimpleSpace('', piece.w, piece.h, type, mode);
-      if (pieceResult && pieceResult.visualization) {
-        const vis = pieceResult.visualization;
-        
-        if (vis.tiles) {
-          // 퍼즐매트 타일들을 해당 조각의 절대 좌표로 변환 (오프셋 적용)
-          vis.tiles.forEach(tile => {
-            allTiles.push({
-              ...tile,
-              x: tile.x + piece.x + offsetX,
-              y: tile.y + piece.y + offsetY
-            });
+
+      if (!pieceResult || !pieceResult.visualization) return;
+
+      const vis = pieceResult.visualization;
+
+      if (vis.tiles) {
+        // 퍼즐매트: 각 조각의 (0,0)부터 타일 시작
+        vis.tiles.forEach(tile => {
+          allTiles.push({
+            ...tile,
+            x: tile.x + piece.x + offsetX,
+            y: tile.y + piece.y + offsetY,
+            pieceIdx: pieceIdx
           });
-        } else if (vis.stripes) {
-          // 롤매트 스트라이프를 해당 조각의 절대 좌표로 변환 (오프셋 적용)
-          vis.stripes.forEach(stripe => {
-            allTiles.push({
-              ...stripe,
-              x: stripe.x + piece.x + offsetX,
-              y: stripe.y + piece.y + offsetY
-            });
+        });
+      } else if (vis.stripes) {
+        // 롤매트: 각 조각의 (0,0)부터 스트라이프 시작
+        vis.stripes.forEach(stripe => {
+          allTiles.push({
+            ...stripe,
+            x: stripe.x + piece.x + offsetX,
+            y: stripe.y + piece.y + offsetY,
+            pieceIdx: pieceIdx
           });
-        }
+        });
       }
     });
 
@@ -424,15 +426,6 @@
       }
     }
 
-    // 배송메모 복사 버튼 표시 여부 업데이트 (애견 롤매트만 표시)
-    if ($copyShippingMemo) {
-      if (productType === 'petRoll') {
-        $copyShippingMemo.style.display = 'block';
-      } else {
-        $copyShippingMemo.style.display = 'none';
-      }
-    }
-
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
     
@@ -529,12 +522,12 @@
       </div>
       <div class="complex-space-controls" style="margin-top: 12px;">
         <div style="margin-bottom: 8px;">
-          <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">공간 붙이기:</div>
+          <div style="font-size: 12px; color: #64748b; margin-bottom: 4px;">공간조각 추가:</div>
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px;">
-            <button class="add-piece-btn" data-space-id="${id}" data-dir="left" style="padding: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer;">← 왼쪽</button>
-            <button class="add-piece-btn" data-space-id="${id}" data-dir="right" style="padding: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer;">오른쪽 →</button>
-            <button class="add-piece-btn" data-space-id="${id}" data-dir="top" style="padding: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer;">↑ 위</button>
-            <button class="add-piece-btn" data-space-id="${id}" data-dir="bottom" style="padding: 6px; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer;">아래 ↓</button>
+            <button class="add-piece-btn" data-space-id="${id}" data-dir="left">← 왼쪽</button>
+            <button class="add-piece-btn" data-space-id="${id}" data-dir="right">오른쪽 →</button>
+            <button class="add-piece-btn" data-space-id="${id}" data-dir="top">↑ 위</button>
+            <button class="add-piece-btn" data-space-id="${id}" data-dir="bottom">아래 ↓</button>
           </div>
         </div>
         <div class="pieces-list" data-pieces-list="${id}" style="margin-top: 8px;"></div>
@@ -616,7 +609,7 @@
       const spaceH = clampNonNegInt(space.getH());
       space.pieces.push({
         id: 'piece-1',
-        name: '기본',
+        name: '조각 1',
         w: spaceW,
         h: spaceH,
         x: 0,
@@ -628,7 +621,7 @@
     // 기본값 설정
     const pieceW = 100;
     const pieceH = 150;
-    const pieceName = `공간 ${space.pieces.length + 1}`;
+    const pieceName = `조각 ${space.pieces.length + 1}`;
 
     // 위치 계산 (기본 공간 기준) - 코너 정렬 방식
     const basePiece = space.pieces[0];
@@ -671,69 +664,86 @@
     const piecesList = space.element.querySelector(`[data-pieces-list="${space.id}"]`);
     if (!piecesList) return;
 
-    if (space.pieces.length === 0) {
+    if (space.pieces.length === 0 || space.pieces.length === 1) {
       piecesList.innerHTML = '';
       return;
     }
 
-    let html = '<div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">공간 목록:</div>';
+    let html = '<div style="font-size: 12px; color: #64748b; margin-bottom: 6px;">공간조각 목록:</div>';
     space.pieces.forEach((piece, idx) => {
+      const isBase = idx === 0;
       html += `
         <div style="padding: 8px; background: #f1f5f9; border-radius: 6px; margin-bottom: 4px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <span style="font-size: 13px; font-weight: 500;">${piece.name}</span>
-            <button class="remove-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" style="padding: 2px 8px; font-size: 11px; background: #fee2e2; color: #b91c1c; border: none; border-radius: 4px; cursor: pointer;">
+            ${!isBase ? `<button class="remove-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" style="padding: 2px 8px; font-size: 11px; background: #fee2e2; color: #b91c1c; border: none; border-radius: 4px; cursor: pointer;">
               삭제
-            </button>
+            </button>` : ''}
           </div>
-          <div style="display: flex; flex-direction: column; gap: 6px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 6px;">
-              <label style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
-                <span>이름</span>
-                <input type="text" class="piece-name" data-piece-idx="${idx}" value="${piece.name}" style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;" />
-              </label>
-              <label style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <!-- 이름 -->
+            <label style="max-width: 200px;">
+              <span>이름</span>
+              <input type="text" class="piece-name" data-piece-idx="${idx}" value="${piece.name}" />
+            </label>
+            ${!isBase ? `<!-- 크기 및 위치 -->
+            <div style="display: grid; grid-template-columns: repeat(4, 130px); gap: 8px;">
+              <label>
                 <span>가로(cm)</span>
-                <input type="number" class="piece-width" data-piece-idx="${idx}" min="0" value="${piece.w}" style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+                <input type="number" class="piece-width" data-piece-idx="${idx}" min="0" value="${piece.w}" />
               </label>
-              <label style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+              <label>
                 <span>세로(cm)</span>
-                <input type="number" class="piece-height" data-piece-idx="${idx}" min="0" value="${piece.h}" style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+                <input type="number" class="piece-height" data-piece-idx="${idx}" min="0" value="${piece.h}" />
               </label>
-              <label style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+              <label>
                 <span>x위치</span>
-                <input type="number" class="piece-x" data-piece-idx="${idx}" value="${piece.x}" style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+                <input type="number" class="piece-x" data-piece-idx="${idx}" value="${piece.x}" />
               </label>
-              <label style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
+              <label>
                 <span>y위치</span>
-                <input type="number" class="piece-y" data-piece-idx="${idx}" value="${piece.y}" style="padding: 4px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;" />
+                <input type="number" class="piece-y" data-piece-idx="${idx}" value="${piece.y}" />
               </label>
-            </div>
-            <div style="display: grid; grid-template-columns: 100px 1fr; gap: 6px;">
-              <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
-                <span>이동</span>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px;">
-                  <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="left" style="padding: 4px; font-size: 10px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 3px; cursor: pointer;">←</button>
-                  <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="right" style="padding: 4px; font-size: 10px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 3px; cursor: pointer;">→</button>
-                  <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="up" style="padding: 4px; font-size: 10px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 3px; cursor: pointer;">↑</button>
-                  <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="down" style="padding: 4px; font-size: 10px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 3px; cursor: pointer;">↓</button>
+            </div>` : ''}
+            ${!isBase && space.pieces.length > 1 ? `<div style="margin-top: 8px; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+              <div style="font-size: 11px; font-weight: 500; color: #64748b; margin-bottom: 10px;">위치 조정</div>
+              <div style="display: flex; gap: 16px; align-items: start;">
+                <!-- 이동 -->
+                <div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">이동 (10cm)</div>
+                  <div style="display: grid; grid-template-columns: repeat(2, 32px); gap: 4px;">
+                    <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="left" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-arrow-left"></i></button>
+                    <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="right" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-arrow-right"></i></button>
+                    <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="up" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-arrow-up"></i></button>
+                    <button class="move-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-dir="down" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-arrow-down"></i></button>
+                  </div>
+                </div>
+                <!-- 정렬 -->
+                <div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">정렬</div>
+                  <div style="display: grid; grid-template-columns: repeat(3, 32px); gap: 4px;">
+                    <!-- X축 정렬 -->
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="x-left" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-left"></i></button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="x-center" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-center"></i></button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="x-right" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-right"></i></button>
+                    <!-- Y축 정렬 -->
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="y-top" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-left fa-rotate-90"></i></button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="y-center" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-center fa-rotate-90"></i></button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="y-bottom" style="width: 32px; height: 32px; padding: 0; font-size: 12px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;"><i class="fas fa-align-right fa-rotate-90"></i></button>
+                  </div>
+                </div>
+                <!-- 붙히기 -->
+                <div>
+                  <div style="font-size: 10px; color: #94a3b8; margin-bottom: 6px;">붙히기</div>
+                  <div style="display: grid; grid-template-columns: repeat(2, 32px); gap: 4px;">
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="x-attach-left" style="width: 32px; height: 32px; padding: 0; font-size: 14px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⇥</button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="x-attach-right" style="width: 32px; height: 32px; padding: 0; font-size: 14px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⇤</button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="y-attach-top" style="width: 32px; height: 32px; padding: 0; font-size: 14px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⤓</button>
+                    <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="y-attach-bottom" style="width: 32px; height: 32px; padding: 0; font-size: 14px; background: #ffffff; color: #64748b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">⤒</button>
+                  </div>
                 </div>
               </div>
-              <div style="font-size: 11px; display: flex; flex-direction: column; gap: 4px;">
-                <span>정렬</span>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px;">
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="left-top" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↖</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="top" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↑</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="right-top" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↗</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="left" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">←</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="center" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">◉</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="right" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">→</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="left-bottom" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↙</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="bottom" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↓</button>
-                  <button class="align-piece-btn" data-space-id="${space.id}" data-piece-idx="${idx}" data-align="right-bottom" style="padding: 2px; font-size: 9px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 2px; cursor: pointer;">↘</button>
-                </div>
-              </div>
-            </div>
+            </div>` : ''}
           </div>
         </div>
       `;
@@ -806,49 +816,50 @@
         const pieceIdx = parseInt(btn.dataset.pieceIdx);
         if (isNaN(pieceIdx) || !space.pieces[pieceIdx]) return;
         if (pieceIdx === 0) return; // 기본 공간은 정렬 불필요
-        
+
         const piece = space.pieces[pieceIdx];
         const basePiece = space.pieces[0];
         const align = btn.dataset.align;
-        
-        if (align === 'left-top') {
-          // 왼쪽 위: 왼쪽 정렬 + 위 정렬
+
+        // X축 정렬 (좌우 방향)
+        if (align === 'x-left') {
+          // X축 왼쪽 정렬: 왼쪽 모서리 기준
           piece.x = basePiece.x;
-          piece.y = basePiece.y;
-        } else if (align === 'top') {
-          // 위: X축 가운데, Y축 위
+        } else if (align === 'x-center') {
+          // X축 중앙 정렬: 중앙 기준
           piece.x = basePiece.x + Math.floor((basePiece.w - piece.w) / 2);
+        } else if (align === 'x-right') {
+          // X축 오른쪽 정렬: 오른쪽 모서리 기준
+          piece.x = basePiece.x + basePiece.w - piece.w;
+        }
+        // X축 붙히기
+        else if (align === 'x-attach-left') {
+          // X축 왼쪽 붙히기: 추가 공간의 오른쪽이 기본 공간의 왼쪽에 붙음
+          piece.x = basePiece.x - piece.w;
+        } else if (align === 'x-attach-right') {
+          // X축 오른쪽 붙히기: 추가 공간의 왼쪽이 기본 공간의 오른쪽에 붙음
+          piece.x = basePiece.x + basePiece.w;
+        }
+        // Y축 정렬 (상하 방향)
+        else if (align === 'y-top') {
+          // Y축 위 정렬: 위쪽 모서리 기준
           piece.y = basePiece.y;
-        } else if (align === 'right-top') {
-          // 오른쪽 위: 오른쪽 정렬 + 위 정렬
-          piece.x = basePiece.x + basePiece.w - piece.w;
-          piece.y = basePiece.y;
-        } else if (align === 'left') {
-          // 왼쪽: 왼쪽 정렬 + Y축 가운데
-          piece.x = basePiece.x;
+        } else if (align === 'y-center') {
+          // Y축 중앙 정렬: 중앙 기준
           piece.y = basePiece.y + Math.floor((basePiece.h - piece.h) / 2);
-        } else if (align === 'center') {
-          // 가운데: 완전히 가운데
-          piece.x = basePiece.x + Math.floor((basePiece.w - piece.w) / 2);
-          piece.y = basePiece.y + Math.floor((basePiece.h - piece.h) / 2);
-        } else if (align === 'right') {
-          // 오른쪽: 오른쪽 정렬 + Y축 가운데
-          piece.x = basePiece.x + basePiece.w - piece.w;
-          piece.y = basePiece.y + Math.floor((basePiece.h - piece.h) / 2);
-        } else if (align === 'left-bottom') {
-          // 왼쪽 아래: 왼쪽 정렬 + 아래 정렬
-          piece.x = basePiece.x;
-          piece.y = basePiece.y + basePiece.h - piece.h;
-        } else if (align === 'bottom') {
-          // 아래: X축 가운데, Y축 아래
-          piece.x = basePiece.x + Math.floor((basePiece.w - piece.w) / 2);
-          piece.y = basePiece.y + basePiece.h - piece.h;
-        } else if (align === 'right-bottom') {
-          // 오른쪽 아래: 오른쪽 정렬 + 아래 정렬
-          piece.x = basePiece.x + basePiece.w - piece.w;
+        } else if (align === 'y-bottom') {
+          // Y축 아래 정렬: 아래쪽 모서리 기준
           piece.y = basePiece.y + basePiece.h - piece.h;
         }
-        
+        // Y축 붙히기
+        else if (align === 'y-attach-top') {
+          // Y축 위 붙히기: 추가 공간의 아래쪽이 기본 공간의 위쪽에 붙음
+          piece.y = basePiece.y - piece.h;
+        } else if (align === 'y-attach-bottom') {
+          // Y축 아래 붙히기: 추가 공간의 위쪽이 기본 공간의 아래쪽에 붙음
+          piece.y = basePiece.y + basePiece.h;
+        }
+
         updatePiecesDisplay(space);
         calculate();
       });
@@ -1520,6 +1531,9 @@
     };
 
     // 각 조각을 개별 계산하여 합산
+    // 조각별 상세 정보 저장
+    const pieceDetails = [];
+
     pieces.forEach((piece, idx) => {
       const pieceResult = calculateSimpleSpace(
         piece.name || `조각 ${idx + 1}`,
@@ -1530,9 +1544,19 @@
       );
 
       if (pieceResult) {
+        // 조각별 상세 정보 저장
+        pieceDetails.push({
+          name: piece.name || `조각 ${idx + 1}`,
+          width: piece.w,
+          height: piece.h,
+          coverageWidth: pieceResult.coverageWidth,
+          coverageHeight: pieceResult.coverageHeight,
+          fitMessages: pieceResult.fitMessages || []
+        });
+
         // 가격 합산
         totalResult.price += pieceResult.price || 0;
-        
+
         // breakdown에 조각명 추가하여 합산
         if (pieceResult.breakdown && pieceResult.breakdown.length > 0) {
           pieceResult.breakdown.forEach(line => {
@@ -1541,12 +1565,12 @@
         } else {
           totalResult.breakdown.push(`[${piece.name || `조각 ${idx + 1}`}] ${pieceResult.type || ''}`);
         }
-        
+
         // 매트 수량 합산
         totalResult.total50 += pieceResult.total50 || 0;
         totalResult.total100 += pieceResult.total100 || 0;
         totalResult.totalPcs += pieceResult.totalPcs || pieceResult.pcs || 0;
-        
+
         // 롤 관련 합산
         if (pieceResult.rollCount) {
           totalResult.rollCount = (totalResult.rollCount || 0) + pieceResult.rollCount;
@@ -1557,8 +1581,8 @@
       }
     });
 
-    // 경고 메시지 필수 추가
-    totalResult.fitMessages.push('⚠️ 경고: 이 견적은 각 조각을 개별 계산하여 합산한 결과입니다. 매트를 경계선에 걸쳐 시공하면 더 효율적일 수 있습니다.');
+    // 조각별 상세 정보를 결과에 추가
+    totalResult.pieceDetails = pieceDetails;
 
     // 총 낭비율 계산 (전체 면적 기준)
     const totalArea = pieces.reduce((sum, p) => sum + (p.w * p.h), 0);
@@ -1688,30 +1712,89 @@
     if (activeSpaces > 0) {
       spaceResults.forEach((r, idx) => {
         const spaceName = r.name || `공간 ${idx + 1}`;
-        totalCompositionHTML += `<div style="margin-bottom: 12px;">
-          <strong>${spaceName}</strong>
-          <span class="muted small">(${r.width}cm × ${r.height}cm)</span>
-        </div>`;
-        if (r.breakdown && r.breakdown.length > 0) {
-          r.breakdown.forEach((line, lineIdx) => {
-            // 배송메모는 구분선으로 분리
-            if (line.includes('배송메모')) {
-              totalCompositionHTML += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;"></div>`;
-              totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 8px; font-weight: 500;">${line}</div>`;
-            } else {
-              totalCompositionHTML += `<div style="margin-left: 15px; margin-bottom: ${lineIdx < r.breakdown.length - 1 ? '6px' : '0'};}">${line}</div>`;
+
+        // 복합 공간인 경우 조각별로 그룹화하여 표시
+        if (r.pieceDetails && r.pieceDetails.length > 0 && r.breakdown) {
+          // 복합 공간은 크기 표시 안함
+          totalCompositionHTML += `<div style="margin-bottom: 12px;">
+            <strong>${spaceName}</strong>
+          </div>`;
+
+          // breakdown을 조각별로 분류
+          const pieceBreakdowns = {};
+          r.breakdown.forEach(line => {
+            const match = line.match(/^\[(.+?)\]\s*(.+)$/);
+            if (match) {
+              const pieceName = match[1];
+              const content = match[2];
+              if (!pieceBreakdowns[pieceName]) {
+                pieceBreakdowns[pieceName] = [];
+              }
+              pieceBreakdowns[pieceName].push(content);
             }
           });
-        }
-        if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
-          totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 10px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.</div>`;
-        }
-        // 재단/여유 안내 메시지 표시 (작은 글씨)
-        if (r.fitMessages && r.fitMessages.length > 0) {
-          totalCompositionHTML += `<div style="margin-top: 6px;"></div>`;
-          r.fitMessages.forEach(msg => {
-            totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
+
+          // 조각별로 출력
+          r.pieceDetails.forEach(piece => {
+            const pieceName = piece.name;
+
+            // 조각 이름 헤더 (한 번만, 조각 크기 포함)
+            totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 8px; margin-bottom: 4px; font-weight: 500;">${pieceName} <span class="muted small" style="font-weight: 400;">(${piece.width}cm × ${piece.height}cm)</span></div>`;
+
+            // breakdown 출력
+            if (pieceBreakdowns[pieceName]) {
+              pieceBreakdowns[pieceName].forEach(line => {
+                totalCompositionHTML += `<div style="margin-left: 30px; margin-bottom: 4px;">${line}</div>`;
+              });
+            }
+
+            // 매트 크기 정보
+            if (Number.isFinite(piece.coverageWidth) && Number.isFinite(piece.coverageHeight)) {
+              totalCompositionHTML += `<div style="margin-left: 30px; margin-top: 4px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.</div>`;
+            }
+
+            // 재단/여유 안내
+            if (piece.fitMessages && piece.fitMessages.length > 0) {
+              piece.fitMessages.forEach(msg => {
+                if (!msg.includes('경고') && !msg.includes('경계선')) {
+                  totalCompositionHTML += `<div style="margin-left: 30px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
+                }
+              });
+            }
+
+            totalCompositionHTML += `<div style="margin-bottom: 8px;"></div>`;
           });
+        } else {
+          // 단순 공간인 경우 기존 방식 (크기 표시)
+          totalCompositionHTML += `<div style="margin-bottom: 12px;">
+            <strong>${spaceName}</strong>
+            <span class="muted small">(${r.width}cm × ${r.height}cm)</span>
+          </div>`;
+
+          if (r.breakdown && r.breakdown.length > 0) {
+            r.breakdown.forEach(line => {
+              // 배송메모는 구분선으로 분리
+              if (line.includes('배송메모')) {
+                totalCompositionHTML += `<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e2e8f0;"></div>`;
+                totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 8px; font-weight: 500;">${line}</div>`;
+              } else {
+                totalCompositionHTML += `<div style="margin-left: 15px; margin-bottom: 6px;">${line}</div>`;
+              }
+            });
+          }
+
+          if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
+            totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 10px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.</div>`;
+          }
+          // 재단/여유 안내 메시지 표시 (작은 글씨)
+          if (r.fitMessages && r.fitMessages.length > 0) {
+            totalCompositionHTML += `<div style="margin-top: 6px;"></div>`;
+            r.fitMessages.forEach(msg => {
+              if (!msg.includes('경고') && !msg.includes('경계선')) {
+                totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
+              }
+            });
+          }
         }
         totalCompositionHTML += `
           <div class="space-visual-wrapper">
@@ -1731,23 +1814,25 @@
 
     renderSpaceVisualizations(spaceResults);
 
-    let totalPcsText = '-';
+    let totalSummaryHTML = '-';
     if (activeSpaces > 0) {
+      let quantityText = '';
       if (currentProduct === 'puzzle') {
         const parts = [];
         if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
         if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
-        totalPcsText = parts.join(' / ');
+        quantityText = parts.join(' / ');
       } else if (currentProduct === 'babyRoll') {
-        totalPcsText = totalRolls > 0 ? `${totalRolls}롤` : '0롤';
+        quantityText = totalRolls > 0 ? `${totalRolls}롤` : '0롤';
       } else if (currentProduct === 'petRoll') {
-        totalPcsText = totalRolls > 0 ?
+        quantityText = totalRolls > 0 ?
           `${totalRolls}롤 (50cm ${totalRollUnits}개)` :
           '0롤';
       }
+      const priceText = KRW.format(totalPrice);
+      totalSummaryHTML = `${quantityText}<br><span style="color: #2563eb; font-weight: 600;">${priceText}</span> <span class="muted small">(할인 미적용가)</span>`;
     }
-    $totalPcs.textContent = totalPcsText;
-    $totalPrice.textContent = activeSpaces > 0 ? KRW.format(totalPrice) : '-';
+    $totalSummary.innerHTML = totalSummaryHTML;
   }
 
 
@@ -1770,31 +1855,82 @@
     const calcModeText = calcMode === 'exact' ? '정확히 맞추기' : '여유있게 깔기';
     const productInfo = PRODUCTS[currentProduct];
 
-    let text = '견적 결과\n\n';
+    let text = '<견적 산출 결과>\n\n';
 
-    text += '견적내용\n';
+    text += '[견적내용]\n';
     spaceResults.forEach((r, idx) => {
       const spaceName = r.name || `공간 ${idx + 1}`;
       text += `\n${spaceName} (${r.width}cm × ${r.height}cm)\n`;
-      if (r.breakdown && r.breakdown.length > 0) {
-        r.breakdown.forEach((line, lineIdx) => {
-          // 배송메모는 구분선으로 분리
-          if (line.includes('배송메모')) {
-            text += '\n';
-            text += `${line}\n`;
-          } else {
-            text += `  ${line}\n`;
+
+      // 복합 공간인 경우 조각별로 그룹화하여 표시
+      if (r.pieceDetails && r.pieceDetails.length > 0 && r.breakdown) {
+        // breakdown을 조각별로 분류
+        const pieceBreakdowns = {};
+        r.breakdown.forEach(line => {
+          const match = line.match(/^\[(.+?)\]\s*(.+)$/);
+          if (match) {
+            const pieceName = match[1];
+            const content = match[2];
+            if (!pieceBreakdowns[pieceName]) {
+              pieceBreakdowns[pieceName] = [];
+            }
+            pieceBreakdowns[pieceName].push(content);
           }
         });
-      }
-      if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
-        text += `  매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.\n`;
-      }
-      // 재단/여유 안내 메시지
-      if (r.fitMessages && r.fitMessages.length > 0) {
-        r.fitMessages.forEach(msg => {
-          text += `  ${msg}\n`;
+
+        // 조각별로 출력
+        r.pieceDetails.forEach(piece => {
+          const pieceName = piece.name;
+
+          // breakdown 출력
+          if (pieceBreakdowns[pieceName]) {
+            pieceBreakdowns[pieceName].forEach(line => {
+              text += `  [${pieceName}] ${line}\n`;
+            });
+          }
+
+          // 매트 크기 정보
+          if (Number.isFinite(piece.coverageWidth) && Number.isFinite(piece.coverageHeight)) {
+            text += `    [${pieceName}] 매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.\n`;
+          }
+
+          // 재단/여유 안내
+          if (piece.fitMessages && piece.fitMessages.length > 0) {
+            piece.fitMessages.forEach(msg => {
+              if (!msg.includes('경고') && !msg.includes('경계선')) {
+                text += `    [${pieceName}] ${msg}\n`;
+              }
+            });
+          }
+
+          text += '\n';
         });
+      } else {
+        // 단순 공간인 경우 기존 방식
+        if (r.breakdown && r.breakdown.length > 0) {
+          r.breakdown.forEach(line => {
+            // 배송메모는 구분선으로 분리
+            if (line.includes('배송메모')) {
+              text += '\n';
+              text += `${line}\n`;
+            } else {
+              text += `  ${line}\n`;
+            }
+          });
+        }
+
+        if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
+          text += `  매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.\n`;
+        }
+
+        // 재단/여유 안내 메시지
+        if (r.fitMessages && r.fitMessages.length > 0) {
+          r.fitMessages.forEach(msg => {
+            if (!msg.includes('경고') && !msg.includes('경계선')) {
+              text += `  ${msg}\n`;
+            }
+          });
+        }
       }
       // 공간 간 구분
       if (idx < spaceResults.length - 1) {
@@ -1802,20 +1938,26 @@
       }
     });
 
-    text += '\n[ 총 장수 ]\n';
+    text += '\n\n[ 총 수량 및 가격 ]\n';
     if (currentProduct === 'puzzle') {
       const parts = [];
       if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
       if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
-      text += `${parts.join(' / ')}\n`;
-    } else if (currentProduct === 'babyRoll') {
-      text += `${totalRolls}롤\n`;
-    } else if (currentProduct === 'petRoll') {
-      text += `${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
+      text += `수량 : ${parts.join(' / ')}\n`;
+    } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      if (currentProduct === 'petRoll') {
+        text += `수량 : ${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
+      } else {
+        text += `수량 : ${totalRolls}롤\n`;
+      }
     }
+    text += `가격 : ${KRW.format(totalPrice)} (할인 미적용가)\n`;
 
-    text += '\n[ 총 가격 ]\n';
-    text += `${KRW.format(totalPrice)} (할인 미적용가)`;
+    text += '\n\n[유의사항]\n';
+    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+      text += '- 온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
+    }
+    text += '- 견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.';
 
     return text;
   }
@@ -2503,66 +2645,6 @@
     });
   }
 
-  // 배송메모 복사 함수
-  function copyShippingMemo() {
-    if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
-      alert('배송메모가 없습니다. 먼저 계산을 실행해주세요.');
-      return;
-    }
-
-    const { spaceResults, shippingMemos } = lastCalculationResults;
-
-    if (!shippingMemos || shippingMemos.length === 0) {
-      alert('배송메모가 없습니다.');
-      return;
-    }
-
-    // 배송메모 텍스트 생성 (공간별로 구분)
-    let memoText = '';
-    spaceResults.forEach((r, idx) => {
-      if (r.shippingMemo && r.shippingMemo !== '배송메모 : 없음') {
-        const spaceName = r.name || `공간 ${idx + 1}`;
-        memoText += `${spaceName}\n`;
-        memoText += `${r.shippingMemo}\n`;
-        if (idx < spaceResults.length - 1) memoText += '\n';
-      }
-    });
-
-    if (!memoText) {
-      alert('배송메모가 없습니다.');
-      return;
-    }
-
-    // 클립보드에 복사
-    navigator.clipboard.writeText(memoText).then(() => {
-      // 성공 메시지
-      $copyShippingMemo.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        복사 완료!
-      `;
-      $copyShippingMemo.style.background = '#10b981';
-      $copyShippingMemo.style.borderColor = '#10b981';
-      $copyShippingMemo.style.color = '#fff';
-
-      setTimeout(() => {
-        $copyShippingMemo.innerHTML = `
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          배송메모 복사
-        `;
-        $copyShippingMemo.style.background = '';
-        $copyShippingMemo.style.borderColor = '';
-        $copyShippingMemo.style.color = '';
-      }, 2000);
-    }).catch(err => {
-      alert('복사에 실패했습니다: ' + err);
-    });
-  }
-
   // 계산 방식 탭 초기화
   function initCalcModeTabs() {
     const calcModeBtns = document.querySelectorAll('.calc-mode-btn');
@@ -2590,7 +2672,6 @@
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);
   $copyEstimate.addEventListener('click', copyEstimate);
-  $copyShippingMemo.addEventListener('click', copyShippingMemo);
 
   // 제품 탭 초기화
   initProductTabs();
