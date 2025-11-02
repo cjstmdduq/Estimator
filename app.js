@@ -690,7 +690,7 @@
               <input type="text" class="piece-name" data-piece-idx="${idx}" value="${piece.name}" />
             </label>
             ${!isBase ? `<!-- 크기 및 위치 -->
-            <div style="display: grid; grid-template-columns: repeat(4, 130px); gap: 8px;">
+            <div class="piece-fields-grid">
               <label>
                 <span>가로(cm)</span>
                 <input type="number" class="piece-width" data-piece-idx="${idx}" min="0" value="${piece.w}" />
@@ -1799,6 +1799,10 @@
             });
           }
         }
+
+        // 각 공간 뒤에 시각화 placeholder 추가
+        totalCompositionHTML += `<div class="space-visual-placeholder" data-space-index="${r.index}"></div>`;
+
         if (idx < spaceResults.length - 1) {
           totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
@@ -1811,16 +1815,15 @@
     }
     $totalComposition.innerHTML = totalCompositionHTML;
 
-    // 기존 space-visual-wrapper 제거
-    const existingVisuals = $totalComposition.parentNode.querySelectorAll('.space-visual-wrapper');
-    existingVisuals.forEach(el => el.remove());
-
-    // space-visual을 total-composition 다음에 추가
-    spaceResults.forEach((r, idx) => {
-      const visualWrapper = document.createElement('div');
-      visualWrapper.className = 'space-visual-wrapper';
-      visualWrapper.innerHTML = `<div class="space-visual" data-space-visual-id="${r.index}"></div>`;
-      $totalComposition.parentNode.insertBefore(visualWrapper, $totalComposition.nextSibling);
+    // 각 placeholder를 실제 시각화로 교체
+    spaceResults.forEach((r) => {
+      const placeholder = $totalComposition.querySelector(`.space-visual-placeholder[data-space-index="${r.index}"]`);
+      if (placeholder) {
+        const visualWrapper = document.createElement('div');
+        visualWrapper.className = 'space-visual-wrapper';
+        visualWrapper.innerHTML = `<div class="space-visual" data-space-visual-id="${r.index}"></div>`;
+        placeholder.parentNode.replaceChild(visualWrapper, placeholder);
+      }
     });
 
     renderSpaceVisualizations(spaceResults);

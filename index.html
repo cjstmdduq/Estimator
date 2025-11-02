@@ -16,94 +16,102 @@
     <main class="container">
       <h1>따사룸 매트견적 계산기</h1>
 
-      <section class="card">
-        <h2>제품 선택</h2>
-        <div class="product-tabs">
-          <div class="product-tab-item">
-            <button class="product-tab-btn active" data-product="babyRoll">
-              <div class="product-tab-image" style="background-image: url('./images/product_01.jpg')"></div>
-            </button>
-            <span class="product-tab-label">유아 롤매트</span>
-          </div>
-          <div class="product-tab-item">
-            <button class="product-tab-btn" data-product="petRoll">
-              <div class="product-tab-image" style="background-image: url('./images/product_02.jpg')"></div>
-            </button>
-            <span class="product-tab-label">애견 롤매트</span>
-          </div>
-          <div class="product-tab-item">
-            <button class="product-tab-btn" data-product="puzzle">
-              <div class="product-tab-image" style="background-image: url('./images/product_03.jpg')"></div>
-            </button>
-            <span class="product-tab-label">퍼즐매트</span>
-          </div>
-        </div>
-      </section>
+      <div class="layout-wrapper">
+        <!-- 왼쪽: 입력 영역 -->
+        <div class="layout-left">
+          <section class="card">
+            <h2>제품 선택</h2>
+            <div class="product-tabs">
+              <div class="product-tab-item">
+                <button class="product-tab-btn active" data-product="babyRoll">
+                  <div class="product-tab-image" style="background-image: url('./images/product_01.jpg')"></div>
+                </button>
+                <span class="product-tab-label">유아 롤매트</span>
+              </div>
+              <div class="product-tab-item">
+                <button class="product-tab-btn" data-product="petRoll">
+                  <div class="product-tab-image" style="background-image: url('./images/product_02.jpg')"></div>
+                </button>
+                <span class="product-tab-label">애견 롤매트</span>
+              </div>
+              <div class="product-tab-item">
+                <button class="product-tab-btn" data-product="puzzle">
+                  <div class="product-tab-image" style="background-image: url('./images/product_03.jpg')"></div>
+                </button>
+                <span class="product-tab-label">퍼즐매트</span>
+              </div>
+            </div>
+          </section>
 
-      <section class="card">
-        <h2>두께 선택</h2>
-        <div id="thickness-selector" class="thickness-tabs">
-          <!-- 동적으로 생성됨 -->
-        </div>
-      </section>
+          <section class="card">
+            <h2>두께 선택</h2>
+            <div id="thickness-selector" class="thickness-tabs">
+              <!-- 동적으로 생성됨 -->
+            </div>
+          </section>
 
-      <section class="card calc-mode-card" data-calc-mode-section>
-        <h2>계산 방식</h2>
-        <div class="calc-mode-tabs">
-          <button class="calc-mode-btn active" data-mode="loose">여유있게 깔기</button>
-          <button class="calc-mode-btn" data-mode="exact">정확히 맞추기</button>
-        </div>
-        <input type="hidden" name="calc-mode" id="calc-mode-value" value="loose">
-        <p class="muted small" style="margin-top: 12px;">
-          퍼즐매트에만 적용됩니다. 롤매트는 자동으로 최적 조합을 찾습니다.
-        </p>
-      </section>
+          <section class="card calc-mode-card" data-calc-mode-section>
+            <h2>계산 방식</h2>
+            <div class="calc-mode-tabs">
+              <button class="calc-mode-btn active" data-mode="loose">여유있게 깔기</button>
+              <button class="calc-mode-btn" data-mode="exact">정확히 맞추기</button>
+            </div>
+            <input type="hidden" name="calc-mode" id="calc-mode-value" value="loose">
+            <p class="muted small" style="margin-top: 12px;">
+              퍼즐매트에만 적용됩니다. 롤매트는 자동으로 최적 조합을 찾습니다.
+            </p>
+          </section>
 
-      <section class="card">
-        <h2>공간 입력</h2>
+          <section class="card">
+            <h2>공간 입력</h2>
 
-        <div id="spaces-container"></div>
+            <div id="spaces-container"></div>
 
-        <div class="button-group">
-          <button id="add-space" class="secondary">+ 공간 추가</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>견적 결과</h2>
-
-        <div class="result">
-          <div style="margin-bottom: 12px;"><strong>총 구성</strong></div>
-          <div id="total-composition" style="margin-left: 20px; margin-bottom: 12px;">-</div>
-          <div style="margin-top: 16px;"><strong>총 수량 및 가격</strong></div>
-          <div id="total-summary" style="margin-left: 20px;">-</div>
+            <div class="button-group">
+              <button id="add-space" class="secondary">+ 공간 추가</button>
+            </div>
+          </section>
         </div>
 
-        <div class="action-buttons">
-          <button id="copy-estimate" class="action-btn secondary-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            견적서 복사
-          </button>
-          <button id="copy-quick-estimate" class="action-btn secondary-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-            간편견적 복사
-          </button>
-          <a id="purchase-link" href="#" target="_blank" class="action-btn primary-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="9" cy="21" r="1"></circle>
-              <circle cx="20" cy="21" r="1"></circle>
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
-            </svg>
-            제품 구매하기
-          </a>
+        <!-- 오른쪽: 견적 결과 -->
+        <div class="layout-right">
+          <section class="card">
+            <h2>견적 결과</h2>
+
+            <div class="result">
+              <div style="margin-bottom: 12px;"><strong>총 구성</strong></div>
+              <div id="total-composition" style="margin-left: 20px; margin-bottom: 12px;">-</div>
+              <div style="margin-top: 16px;"><strong>총 수량 및 가격</strong></div>
+              <div id="total-summary" style="margin-left: 20px;">-</div>
+            </div>
+
+            <div class="action-buttons">
+              <button id="copy-estimate" class="action-btn secondary-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                견적서 복사
+              </button>
+              <button id="copy-quick-estimate" class="action-btn secondary-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                간편견적 복사
+              </button>
+              <a id="purchase-link" href="#" target="_blank" class="action-btn primary-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="9" cy="21" r="1"></circle>
+                  <circle cx="20" cy="21" r="1"></circle>
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                </svg>
+                제품 구매하기
+              </a>
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
 
       <footer class="muted small" style="text-align: center; padding: 20px 0; line-height: 1.6;">
         <strong style="color: #475569;">따사룸 (주)대승아이앤피</strong> 공식 견적 계산기<br>
