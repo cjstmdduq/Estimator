@@ -8,6 +8,8 @@
   const $totalSummary = document.getElementById('total-summary');
   const $totalComposition = document.getElementById('total-composition');
   const $calcModeSection = document.querySelector('.calc-mode-card') || document.querySelector('[data-calc-mode-section]');
+  const $calcModeAutoButton = document.getElementById('calc-mode-auto');
+  let calcModeButtons = [];
 
   // 퍼즐매트 가격 정보 (100×100cm 1pcs 기준)
   const PUZZLE_PRICES = {
@@ -427,6 +429,23 @@
       }
     }
 
+    if ($calcModeAutoButton) {
+      if (productType === 'puzzle') {
+        $calcModeAutoButton.style.removeProperty('display');
+        $calcModeAutoButton.disabled = false;
+        if (getCalcMode() === 'auto') {
+          updateCalcModeState('auto');
+        }
+      } else {
+        $calcModeAutoButton.style.display = 'none';
+        $calcModeAutoButton.disabled = true;
+        $calcModeAutoButton.classList.remove('active');
+        if (getCalcMode() === 'auto') {
+          updateCalcModeState('loose');
+        }
+      }
+    }
+
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
     
@@ -468,6 +487,9 @@
         // 제품 정보 업데이트
         const productType = btn.dataset.product;
         updateProductDisplay(productType);
+        if (productType === 'puzzle') {
+          updateCalcModeState('auto');
+        }
       });
     });
   }
@@ -912,6 +934,26 @@
   function getCalcMode() {
     const hiddenInput = document.getElementById('calc-mode-value');
     return hiddenInput ? hiddenInput.value : 'loose';
+  }
+
+  function getModeLabel(mode) {
+    if (mode === 'exact') return '정확히 맞추기';
+    if (mode === 'auto') return '최적조합';
+    return '여유있게 깔기';
+  }
+
+  function updateCalcModeState(mode) {
+    const hiddenInput = document.getElementById('calc-mode-value');
+    if (hiddenInput) {
+      hiddenInput.value = mode;
+    }
+    calcModeButtons.forEach(btn => {
+      if (btn.dataset.mode === mode) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
   }
 
   // 현재 두께 라벨 가져오기
@@ -1374,7 +1416,17 @@
   }
 
   // 복합 매트 최적화 계산 (100cm 우선, 나머지 50cm 4장 세트)
-  function calculateHybrid(width, height, mode) {
+  function calculateHybrid(width, height, modeOrOptions) {
+    const options = typeof modeOrOptions === 'string'
+      ? {
+          roundRemainX: modeOrOptions === 'exact' ? ceilDiv : floorDiv,
+          roundRemainY: modeOrOptions === 'exact' ? ceilDiv : floorDiv
+        }
+      : (modeOrOptions || {});
+
+    const roundRemainX = options.roundRemainX || floorDiv;
+    const roundRemainY = options.roundRemainY || floorDiv;
+
     // 100cm로 채울 수 있는 최대 개수
     const n100x = Math.floor(width / 100);
     const n100y = Math.floor(height / 100);
@@ -1385,34 +1437,31 @@
 
     let total100 = 0;
     let total50Tiles = 0;  // 50cm 타일 개수
-    let breakdown = [];
+    const breakdown = [];
 
     // 1. 메인 영역 (100cm로 채우기)
     if (n100x > 0 && n100y > 0) {
       total100 = n100x * n100y;
     }
 
-    // 나머지 영역 계산 로직 선택
-    const divFunc = mode === 'exact' ? ceilDiv : floorDiv;
+    const remainXTiles = remainX > 0 ? roundRemainX(remainX, 50) : 0;
+    const remainYTiles = remainY > 0 ? roundRemainY(remainY, 50) : 0;
 
     // 2. 오른쪽 세로 띠 (remainX × (n100y * 100))
-    if (remainX > 0 && n100y > 0) {
-      const stripHeight = n100y * 100;
-      const stripTiles = divFunc(remainX, 50) * divFunc(stripHeight, 50);
-      total50Tiles += stripTiles;
+    if (remainX > 0 && n100y > 0 && remainXTiles > 0) {
+      const stripHeightTiles = ceilDiv(n100y * 100, 50); // 100cm 단위라 항상 정수
+      total50Tiles += remainXTiles * stripHeightTiles;
     }
 
     // 3. 아래쪽 가로 띠 (n100x * 100 × remainY)
-    if (n100x > 0 && remainY > 0) {
-      const stripWidth = n100x * 100;
-      const stripTiles = divFunc(stripWidth, 50) * divFunc(remainY, 50);
-      total50Tiles += stripTiles;
+    if (n100x > 0 && remainY > 0 && remainYTiles > 0) {
+      const stripWidthTiles = ceilDiv(n100x * 100, 50); // 100cm 단위라 항상 정수
+      total50Tiles += stripWidthTiles * remainYTiles;
     }
 
     // 4. 오른쪽 아래 모서리 (remainX × remainY)
-    if (remainX > 0 && remainY > 0) {
-      const cornerTiles = divFunc(remainX, 50) * divFunc(remainY, 50);
-      total50Tiles += cornerTiles;
+    if (remainX > 0 && remainY > 0 && remainXTiles > 0 && remainYTiles > 0) {
+      total50Tiles += remainXTiles * remainYTiles;
     }
 
     // 50cm 타일을 4장 단위 세트로 변환
@@ -1428,9 +1477,9 @@
     const usedArea50 = total50Tiles * 50 * 50;
     const totalUsedArea = usedArea100 + usedArea50;
     const wastePercent = area > 0 ? Math.round(((totalUsedArea - area) / totalUsedArea) * 100) : 0;
-    const divFuncCoverage = mode === 'exact' ? ceilDiv : floorDiv;
-    const coverageWidth = (n100x * 100) + (remainX > 0 ? divFuncCoverage(remainX, 50) * 50 : 0);
-    const coverageHeight = (n100y * 100) + (remainY > 0 ? divFuncCoverage(remainY, 50) * 50 : 0);
+
+    const coverageWidth = (n100x * 100) + (remainXTiles * 50);
+    const coverageHeight = (n100y * 100) + (remainYTiles * 50);
 
     // 상세 내역
     if (total100 > 0) breakdown.push(`${getThicknessLabel()} 100×100cm 1pcs: ${total100}장`);
@@ -1458,6 +1507,43 @@
       coverageWidth,
       coverageHeight,
       fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight)
+    };
+  }
+
+  function calculatePuzzleAuto(width, height) {
+    const looseResult = calculateHybrid(width, height, 'loose');
+    const coverageWidthLoose = looseResult.coverageWidth || 0;
+    const coverageHeightLoose = looseResult.coverageHeight || 0;
+    const widthShortage = Math.max(0, width - coverageWidthLoose);
+    const heightShortage = Math.max(0, height - coverageHeightLoose);
+
+    const needsWidthAdjust = widthShortage >= 25;
+    const needsHeightAdjust = heightShortage >= 25;
+
+    if (!needsWidthAdjust && !needsHeightAdjust) {
+      return {
+        ...looseResult,
+        autoModeSource: 'loose'
+      };
+    }
+
+    const hybridResult = calculateHybrid(width, height, {
+      roundRemainX: needsWidthAdjust ? ceilDiv : floorDiv,
+      roundRemainY: needsHeightAdjust ? ceilDiv : floorDiv
+    });
+
+    let autoModeSource = 'loose';
+    if (needsWidthAdjust && needsHeightAdjust) {
+      autoModeSource = 'exact';
+    } else if (needsWidthAdjust) {
+      autoModeSource = 'width';
+    } else if (needsHeightAdjust) {
+      autoModeSource = 'height';
+    }
+
+    return {
+      ...hybridResult,
+      autoModeSource
     };
   }
 
@@ -1490,37 +1576,54 @@
 
     let result;
     if (type === '50') {
-      result = calculate50(W, H, mode);
+      const appliedMode = mode === 'auto' ? 'loose' : mode;
+      result = calculate50(W, H, appliedMode);
     } else if (type === '100') {
-      result = calculate100(W, H, mode);
+      const appliedMode = mode === 'auto' ? 'loose' : mode;
+      result = calculate100(W, H, appliedMode);
     } else if (type === 'roll') {
-      result = calculateRollMat(W, H, mode, { isPet: false });
+      const appliedMode = mode === 'auto' ? 'loose' : mode;
+      result = calculateRollMat(W, H, appliedMode, { isPet: false });
     } else if (type === 'petRoll') {
-      result = calculateRollMat(W, H, mode, { isPet: true });
+      const appliedMode = mode === 'auto' ? 'loose' : mode;
+      result = calculateRollMat(W, H, appliedMode, { isPet: true });
     } else { // hybrid
-      result = calculateHybrid(W, H, mode);
+      if (mode === 'auto') {
+        result = calculatePuzzleAuto(W, H);
+      } else {
+        result = calculateHybrid(W, H, mode);
+      }
     }
 
     const visualization = createVisualizationData(type, W, H, result);
+
+    const isPuzzleAuto = mode === 'auto' && type === 'hybrid';
+    const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
+    const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
 
     return {
       name: name,
       width: W,
       height: H,
-      mode: mode === 'exact' ? '정확히 맞추기' : '여유있게 깔기',
-      modeKey: mode,
       spaceType: type,
       visualization,
-      ...result
+      ...result,
+      mode: getModeLabel(displayMode),
+      modeKey: outputModeKey
     };
   }
 
   // 복합 공간 계산 (분리 계산 후 합산)
   function calculateComplexSpace(name, pieces, type, mode) {
+    const isPuzzleAuto = mode === 'auto' && type === 'hybrid';
+    const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
+    const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
+    let autoModeSource = null;
+
     const totalResult = {
       name: name,
-      mode: mode === 'exact' ? '정확히 맞추기' : '여유있게 깔기',
-      modeKey: mode,
+      mode: getModeLabel(displayMode),
+      modeKey: outputModeKey,
       spaceType: type,
       price: 0,
       breakdown: [],
@@ -1582,6 +1685,10 @@
           totalResult.totalRollUnits = (totalResult.totalRollUnits || 0) + pieceResult.totalRollUnits;
         }
       }
+
+      if (isPuzzleAuto && pieceResult && pieceResult.autoModeSource && !autoModeSource) {
+        autoModeSource = pieceResult.autoModeSource;
+      }
     });
 
     // 조각별 상세 정보를 결과에 추가
@@ -1618,6 +1725,10 @@
     });
     totalResult.width = maxX - minX;
     totalResult.height = maxY - minY;
+
+    if (isPuzzleAuto) {
+      totalResult.autoModeSource = autoModeSource || 'loose';
+    }
 
     return totalResult;
   }
@@ -1997,7 +2108,7 @@
             return;
           }
 
-          if (typeof content === 'string' && content.startsWith('>')) {
+          if (typeof content === 'string' && (content.startsWith('>') || content.startsWith('►'))) {
             text += `${content}\n`;
           } else {
             text += `  ${content}\n`;
@@ -2481,26 +2592,23 @@
 
   // 계산 방식 탭 초기화
   function initCalcModeTabs() {
-    const calcModeBtns = document.querySelectorAll('.calc-mode-btn');
-    const hiddenInput = document.getElementById('calc-mode-value');
+    calcModeButtons = Array.from(document.querySelectorAll('.calc-mode-btn'));
 
-    calcModeBtns.forEach(btn => {
+    calcModeButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const mode = btn.dataset.mode;
+        if (!mode) return;
+        if (mode === 'auto' && currentProduct !== 'puzzle') return;
 
-        // 모든 버튼에서 active 제거
-        calcModeBtns.forEach(b => b.classList.remove('active'));
-
-        // 선택된 버튼 활성화
-        btn.classList.add('active');
-
-        // hidden input 업데이트
-        hiddenInput.value = mode;
-
-        // 재계산
+        updateCalcModeState(mode);
         calculate();
       });
     });
+
+    // 퍼즐이 기본 제품이 아니면 기본 모드를 'auto'로 설정하지 않음
+    const inputMode = getCalcMode();
+    const initialMode = currentProduct === 'puzzle' ? inputMode : (inputMode === 'auto' ? 'loose' : inputMode);
+    updateCalcModeState(initialMode);
   }
 
   // 이벤트 리스너 등록
