@@ -3,7 +3,6 @@
 
   const $addSpace = document.getElementById('add-space');
   const $copyEstimate = document.getElementById('copy-estimate');
-  const $copyQuickEstimate = document.getElementById('copy-quick-estimate');
   const $purchaseLink = document.getElementById('purchase-link');
   const $spacesContainer = document.getElementById('spaces-container');
   const $totalSummary = document.getElementById('total-summary');
@@ -13,8 +12,8 @@
   // 퍼즐매트 가격 정보 (100×100cm 1pcs 기준)
   const PUZZLE_PRICES = {
     25: 17900,      // 25T
-    '25plus': 21900, // 25T Plus+
-    40: 25300       // 40T
+    '25plus': 22800, // 25T Plus+
+    40: 26300       // 40T
   };
 
   // 롤매트 가격 정보 (50cm 기준, 두께별/폭별)
@@ -321,8 +320,7 @@
   let spaceCounter = 0;
   const spaces = [];
   let lastCalculationResults = [];  // 마지막 계산 결과 저장
-  let copySuccessTimeout = null;  // 견적서 복사 버튼 타임아웃
-  let quickCopySuccessTimeout = null;  // 간편견적 복사 버튼 타임아웃
+  let copySuccessTimeout = null;  // 견적 복사 버튼 타임아웃
 
   let currentProduct = 'babyRoll';
   let currentThickness = '25';  // 기본 두께
@@ -1181,12 +1179,14 @@
     const breakdown = [];
 
     solutions.forEach(sol => {
+      const rollGroupCount = sol.count * splitCount;
+      const rollLengthCm = rollLength;
       const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
       if (isPet) {
-        const units = lengthIn50cm * sol.count * splitCount;
-        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText} (50cm ${units}개 구매)`);
+        const units = lengthIn50cm * rollGroupCount;
+        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × 50cm 길이 × ${units}개 (${rollLengthCm}cm 길이 × ${rollGroupCount}개)`);
       } else {
-        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLength}cm 길이 × ${countText}`);
+        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLengthCm}cm 길이 × ${countText}`);
       }
     });
 
@@ -1209,7 +1209,7 @@
         const rollText = splitCount > 1 ? `${totalRollsPerWidth}롤` : `${sol.count}롤`;
         return `${sol.width}cm 폭 ${meters} ${rollText}`;
       });
-      shippingMemo = `배송메모(재단요청): ${cutRequestList.join(', ')}으로 재단`;
+      shippingMemo = `► 배송메모: ${cutRequestList.join(', ')}으로 재단요청`;
       breakdown.push(shippingMemo);
     }
 
@@ -1955,7 +1955,7 @@
     return summary;
   }
 
-  // 견적서 텍스트 생성 함수
+  // 견적 텍스트 생성 함수
   function generateEstimateText() {
     if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
       return '견적 결과가 없습니다. 먼저 계산을 실행해주세요.';
@@ -1970,94 +1970,47 @@
       totalRollUnits
     } = lastCalculationResults;
 
-    const calcMode = getCalcMode();
-    const calcModeText = calcMode === 'exact' ? '정확히 맞추기' : '여유있게 깔기';
-    const productInfo = PRODUCTS[currentProduct];
-
     let text = '<견적 산출 결과>\n\n';
 
     text += '[견적내용]\n';
-    spaceResults.forEach((r, idx) => {
-      const spaceName = r.name || `공간 ${idx + 1}`;
-      text += `\n${spaceName} (${r.width}cm × ${r.height}cm)\n`;
+    spaceResults.forEach((result, idx) => {
+      const summary = buildSpaceQuickSummary(result, idx);
+      const header = summary.dimensions ? `${summary.name} (${summary.dimensions})` : summary.name;
 
-      // 복합 공간인 경우 조각별로 그룹화하여 표시
-      if (r.pieceDetails && r.pieceDetails.length > 0 && r.breakdown) {
-        // breakdown을 조각별로 분류
-        const pieceBreakdowns = {};
-        r.breakdown.forEach(line => {
-          const match = line.match(/^\[(.+?)\]\s*(.+)$/);
-          if (match) {
-            const pieceName = match[1];
-            const content = match[2];
-            if (!pieceBreakdowns[pieceName]) {
-              pieceBreakdowns[pieceName] = [];
+      if (idx === 0) {
+        text += `${header}\n`;
+      } else {
+        text += `\n────────────────────\n${header}\n`;
+      }
+
+      if (summary.lines.length > 0) {
+        let previousWasBlank = false;
+        summary.lines.forEach(line => {
+          const content = typeof line === 'string' ? line.trimEnd() : line;
+          const isBlank = !content;
+
+          if (isBlank) {
+            if (!previousWasBlank) {
+              text += '\n';
+              previousWasBlank = true;
             }
-            pieceBreakdowns[pieceName].push(content);
-          }
-        });
-
-        // 조각별로 출력
-        r.pieceDetails.forEach(piece => {
-          const pieceName = piece.name;
-
-          // breakdown 출력
-          if (pieceBreakdowns[pieceName]) {
-            pieceBreakdowns[pieceName].forEach(line => {
-              text += `  [${pieceName}] ${line}\n`;
-            });
+            return;
           }
 
-          // 매트 크기 정보
-          if (Number.isFinite(piece.coverageWidth) && Number.isFinite(piece.coverageHeight)) {
-            text += `    [${pieceName}] 매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.\n`;
+          if (typeof content === 'string' && content.startsWith('>')) {
+            text += `${content}\n`;
+          } else {
+            text += `  ${content}\n`;
           }
-
-          // 재단/여유 안내
-          if (piece.fitMessages && piece.fitMessages.length > 0) {
-            piece.fitMessages.forEach(msg => {
-              if (!msg.includes('경고') && !msg.includes('경계선')) {
-                text += `    [${pieceName}] ${msg}\n`;
-              }
-            });
-          }
-
-          text += '\n';
+          previousWasBlank = false;
         });
       } else {
-        // 단순 공간인 경우 기존 방식
-        if (r.breakdown && r.breakdown.length > 0) {
-          r.breakdown.forEach(line => {
-            // 배송메모는 구분선으로 분리
-            if (line.includes('배송메모')) {
-              text += '\n';
-              text += `${line}\n`;
-            } else {
-              text += `  ${line}\n`;
-            }
-          });
-        }
-
-        if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
-          text += `  매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.\n`;
-        }
-
-        // 재단/여유 안내 메시지
-        if (r.fitMessages && r.fitMessages.length > 0) {
-          r.fitMessages.forEach(msg => {
-            if (!msg.includes('경고') && !msg.includes('경계선')) {
-              text += `  ${msg}\n`;
-            }
-          });
-        }
-      }
-      // 공간 간 구분
-      if (idx < spaceResults.length - 1) {
-        text += '\n────────────────────\n';
+        text += '  상세 정보 없음\n';
       }
     });
 
-    text += '\n\n[ 총 수량 및 가격 ]\n';
+    text = text.replace(/\n+$/, '\n\n');
+    text += '[수량 및 가격]\n';
     if (currentProduct === 'puzzle') {
       const parts = [];
       if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
@@ -2072,12 +2025,14 @@
     }
     text += `가격 : ${KRW.format(totalPrice)} (할인 미적용가)\n`;
 
-    text += '\n\n[유의사항]\n';
+    text = text.replace(/\n+$/, '\n\n');
+    text += '[유의사항]\n';
     if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      text += '- 온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
+      text += '온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
     }
-    text += '- 견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.';
+    text += '견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.\n';
 
+    text = text.replace(/\n+$/, '\n\n');
     return text;
   }
 
@@ -2492,32 +2447,14 @@
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
-      견적서 복사
+      견적 복사
     `;
     $copyEstimate.style.background = '';
     $copyEstimate.style.borderColor = '';
     $copyEstimate.style.color = '';
   }
 
-  // 간편견적 복사 버튼 상태 초기화
-  function resetQuickCopyButton() {
-    if (quickCopySuccessTimeout) {
-      clearTimeout(quickCopySuccessTimeout);
-      quickCopySuccessTimeout = null;
-    }
-    $copyQuickEstimate.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      간편견적 복사
-    `;
-    $copyQuickEstimate.style.background = '';
-    $copyQuickEstimate.style.borderColor = '';
-    $copyQuickEstimate.style.color = '';
-  }
-
-  // 견적서 복사 함수
+  // 견적 복사 함수
   function copyEstimate() {
     const text = generateEstimateText();
 
@@ -2536,97 +2473,6 @@
 
       copySuccessTimeout = setTimeout(() => {
         resetCopyButton();
-      }, 2000);
-    }).catch(err => {
-      alert('복사에 실패했습니다: ' + err);
-    });
-  }
-
-  // 간편견적 생성 함수
-  function generateQuickEstimateText() {
-    if (!lastCalculationResults || lastCalculationResults.activeSpaces === 0) {
-      return '견적 결과가 없습니다.';
-    }
-
-    const {
-      spaceResults,
-      total50,
-      total100,
-      totalPrice,
-      totalRolls,
-      totalRollUnits
-    } = lastCalculationResults;
-
-    const calcMode = getCalcMode();
-    const calcModeText = calcMode === 'exact' ? '정확히 맞추기' : '여유있게 깔기';
-    const productInfo = PRODUCTS[currentProduct];
-
-    let text = '<견적 산출 결과>\n\n';
-
-    text += '[견적내용]\n';
-    spaceResults.forEach((r, idx) => {
-      const summary = buildSpaceQuickSummary(r, idx);
-      const header = summary.dimensions ? `${summary.name} (${summary.dimensions})` : summary.name;
-      text += `\n${header}\n`;
-
-      if (summary.lines.length > 0) {
-        summary.lines.forEach(line => {
-          if (line === '') {
-            text += '\n';
-          } else {
-            text += `  ${line}\n`;
-          }
-        });
-      }
-
-      if (idx < spaceResults.length - 1) {
-        text += '\n────────────────────\n';
-      }
-    });
-
-    text += '\n\n[ 총 수량 및 가격 ]\n';
-    if (currentProduct === 'puzzle') {
-      const parts = [];
-      if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
-      if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
-      text += `수량 : ${parts.join(' / ')}\n`;
-    } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      if (currentProduct === 'petRoll') {
-        text += `수량 : ${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
-      } else {
-        text += `수량 : ${totalRolls}롤\n`;
-      }
-    }
-    text += `가격 : ${KRW.format(totalPrice)} (할인 미적용가)\n`;
-
-    text += '\n\n[유의사항]\n';
-    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      text += '- 온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
-    }
-    text += '- 견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.';
-
-    return text;
-  }
-
-  // 간편견적 복사 함수
-  function copyQuickEstimate() {
-    const text = generateQuickEstimateText();
-
-    // 클립보드에 복사
-    navigator.clipboard.writeText(text).then(() => {
-      // 성공 메시지
-      $copyQuickEstimate.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        복사 완료!
-      `;
-      $copyQuickEstimate.style.background = '#10b981';
-      $copyQuickEstimate.style.borderColor = '#10b981';
-      $copyQuickEstimate.style.color = '#fff';
-
-      quickCopySuccessTimeout = setTimeout(() => {
-        resetQuickCopyButton();
       }, 2000);
     }).catch(err => {
       alert('복사에 실패했습니다: ' + err);
@@ -2660,7 +2506,6 @@
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);
   $copyEstimate.addEventListener('click', copyEstimate);
-  $copyQuickEstimate.addEventListener('click', copyQuickEstimate);
 
   // 제품 탭 초기화
   initProductTabs();
