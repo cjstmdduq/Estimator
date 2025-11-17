@@ -1919,7 +1919,7 @@
         }
       });
       if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-        totalCompositionHTML += `<div style="margin-top: 12px; color: #94a3b8; font-size: 12px;">제품 출고 시 온도차에 의한 수축과 재단 과정의 오차를 고려해 여분을 두고 출고합니다.</div>`;
+        totalCompositionHTML += `<div style="margin-top: 12px; color: #94a3b8; font-size: 12px;">온도 변화에 따른 수축을 고려해, 폭·길이 모두 여유 있게 출고됩니다.</div>`;
       }
     } else {
       totalCompositionHTML = '-';
@@ -2139,7 +2139,7 @@
     text = text.replace(/\n+$/, '\n\n');
     text += '[유의사항]\n';
     if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      text += '온도차에 의한 크기 변화를 고려하여 길이와 폭에 약간의 여분을 두고 시공하시기 바랍니다.\n';
+      text += '온도 변화에 따른 수축을 고려해, 폭·길이 모두 여유 있게 출고됩니다.\n';
     }
     text += '견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.\n';
 
