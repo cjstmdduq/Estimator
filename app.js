@@ -1369,6 +1369,133 @@
   // 조각 추가 버튼 이벤트 리스너
   $addPiece.addEventListener('click', addPieceToComplex);
 
+  // ========== 단순 공간 관리 ==========
+  // 공간 추가 함수 (단순 버전 - 조각 추가 기능 제거됨)
+  function addSpace() {
+    spaceCounter++;
+    const id = spaceCounter;
+
+    const spaceDiv = document.createElement('div');
+    spaceDiv.className = 'space-section';
+    spaceDiv.dataset.spaceId = id;
+
+    spaceDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h3 style="margin: 0;">공간 정보</h3>
+        <button class="remove-space" data-space-id="${id}">삭제</button>
+      </div>
+      <label class="space-name-label" style="${spaces.length > 0 ? 'display: flex;' : 'display: none;'}">
+        <span>공간 이름</span>
+        <input type="text" class="space-name" placeholder="예: 거실" value="" />
+      </label>
+      <div style="margin-bottom: 12px;">
+        <div class="grid">
+          <label>
+            <span>가로(cm)</span>
+            <input type="number" class="space-w" min="0" value="300" />
+          </label>
+          <label>
+            <span>세로(cm)</span>
+            <input type="number" class="space-h" min="0" value="200" />
+          </label>
+        </div>
+      </div>
+    `;
+
+    $spacesContainer.appendChild(spaceDiv);
+
+    // 삭제 버튼 이벤트
+    const removeBtn = spaceDiv.querySelector('.remove-space');
+    removeBtn.addEventListener('click', () => removeSpace(id));
+
+    // 입력 변경 시 자동 계산
+    const inputs = spaceDiv.querySelectorAll('input, select');
+    inputs.forEach(input => {
+      ['input', 'change'].forEach(evt => {
+        input.addEventListener(evt, calculate);
+      });
+    });
+
+    // spaces 배열에 추가
+    spaces.push({
+      id,
+      element: spaceDiv,
+      getName: () => spaceDiv.querySelector('.space-name').value,
+      getW: () => spaceDiv.querySelector('.space-w').value,
+      getH: () => spaceDiv.querySelector('.space-h').value,
+      getType: () => {
+        // 현재 제품에 따라 자동으로 타입 결정
+        if (currentProduct === 'puzzle') return 'hybrid';
+        if (currentProduct === 'babyRoll') return 'roll';
+        if (currentProduct === 'petRoll') return 'petRoll';
+        return 'hybrid';
+      }
+    });
+
+    // 이름 필드 표시 여부 업데이트
+    updateSpaceNameFields();
+
+    calculate();
+  }
+
+  // 공간 삭제 함수
+  function removeSpace(id) {
+    const index = spaces.findIndex(s => s.id === id);
+    if (index !== -1) {
+      spaces[index].element.remove();
+      spaces.splice(index, 1);
+
+      // 이름 필드 표시 여부 업데이트
+      updateSpaceNameFields();
+
+      calculate();
+    }
+  }
+
+  // 모든 공간의 이름 필드를 업데이트
+  function updateSpaceNameFields() {
+    const showSpaceName = spaces.length > 1;
+
+    spaces.forEach(space => {
+      const nameLabel = space.element.querySelector('.space-name-label');
+      const nameInput = space.element.querySelector('.space-name');
+
+      if (showSpaceName) {
+        if (nameLabel) nameLabel.style.display = 'flex';
+      } else {
+        if (nameLabel) nameLabel.style.display = 'none';
+        if (nameInput) nameInput.value = '';
+      }
+    });
+  }
+
+  // 제품 탭 초기화
+  function initProductTabs() {
+    const tabButtons = document.querySelectorAll('.product-tab-btn');
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+
+        // 모든 탭에서 active 클래스 제거
+        tabButtons.forEach(b => b.classList.remove('active'));
+
+        // 클릭된 탭에 active 클래스 추가
+        btn.classList.add('active');
+
+        // 제품 정보 업데이트
+        const productType = btn.dataset.product;
+        updateProductDisplay(productType);
+      });
+    });
+  }
+
+  // clampNonNegInt helper
+  function clampNonNegInt(val) {
+    const num = parseInt(val);
+    return isNaN(num) || num < 0 ? 0 : num;
+  }
+
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);
   $copyEstimate.addEventListener('click', copyEstimate);
