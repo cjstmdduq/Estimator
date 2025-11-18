@@ -1,6 +1,9 @@
 (function () {
-  const KRW = new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW', maximumFractionDigits: 0 });
+  // ========== 모듈 의존성 ==========
+  // 필수 모듈: constants.js, prices.js, utils.js, calculations.js, visualization.js
+  // 위 모듈들이 먼저 로드되어야 함
 
+  // ========== DOM 요소 참조 ==========
   const $addSpace = document.getElementById('add-space');
   const $copyEstimate = document.getElementById('copy-estimate');
   const $purchaseLink = document.getElementById('purchase-link');
@@ -11,314 +14,7 @@
   const $calcModeAutoButton = document.getElementById('calc-mode-auto');
   let calcModeButtons = [];
 
-  // 퍼즐매트 가격 정보 (100×100cm 1pcs 기준)
-  const PUZZLE_PRICES = {
-    25: 17900,      // 25T
-    '25plus': 22800, // 25T Plus+
-    40: 26300       // 40T
-  };
-
-  // 롤매트 가격 정보 (50cm 기준, 두께별/폭별)
-  const ROLL_PRICES = {
-    6: { 110: 10400, 125: 11900, 140: 13200 },
-    9: { 110: 10900, 125: 12300, 140: 13500 },
-    12: { 110: 12600, 125: 14500, 140: 16800 },
-    14: { 110: 13600, 125: 15600, 140: 17800 },
-    17: { 70: 10700, 110: 13800, 125: 16100, 140: 18200 },
-    22: { 110: 19100, 125: 20900 }
-  };
-
-  // 롤매트 폭 우선순위
-  const ROLL_WIDTH_PRIORITY = {
-    70: 3,   // 낮은 우선순위
-    110: 1,  // 높은 우선순위
-    120: 3,  // 낮은 우선순위
-    125: 2,  // 중간 우선순위
-    140: 1   // 높은 우선순위
-  };
-
-  function getRollWidthPriority(width, thickness) {
-    let priority = ROLL_WIDTH_PRIORITY[width] ?? 2;
-    if (thickness === 17 && width === 70) {
-      priority += 2;
-    }
-    return priority;
-  }
-
-  // 롤매트 두께별 최대 길이 (cm)
-  const ROLL_MAX_LENGTH = {
-    6: 1300,   // 13m
-    9: 1200,   // 12m
-    12: 1200,  // 12m
-    14: 1000,  // 10m
-    17: 800,   // 8m
-    22: 600    // 6m
-  };
-
-  // 보완 옵션 임계치(부족폭 cm 이상이면 추가 롤 제안)
-  const COMPLEMENT_GAP_THRESHOLD_CM = 15;
-  // 보완 시 선호 폭 순서 (사용 가능 폭과 교집합 적용)
-  const PREFERRED_COMPLEMENT_WIDTHS = [110, 125, 140, 70];
-
-  // 고객 선호 폭 선택 규칙 (폭 기준, cm)
-  const PREFERRED_WIDTH_RULES = [
-    { min: 150, max: 170, prefer: [{ width: 110, count: 2, mode: 'exact' }] },
-    { min: 180, max: 190, prefer: [{ width: 110, count: 2, mode: 'exact' }] }
-  ];
-
-  // 정확(≥) 조합에서 허용하는 최대 과충족(cm)
-  const EXACT_OVERAGE_CAP_CM = 20;
-  // 대체 조합 탐색 시 허용할 최대 과충족(cm)
-  const EXTENDED_EXACT_OVERAGE_CAP_CM = 80;
-  // 길이 방향 여유/부족 허용 임계치(cm)
-  const LENGTH_RELAXATION_THRESHOLD_CM = 20;
-
-  const SVG_NS = 'http://www.w3.org/2000/svg';
-
-  function createPuzzleVisualization(spaceWidth, spaceHeight, coverageWidth, coverageHeight, result) {
-    const minorGrid = 10;
-    const majorGrid = 50;
-    const tiles = [];
-
-    // Hybrid 매트인 경우 (100cm + 50cm 조합)
-    if (result && result.n100x !== undefined && result.n100y !== undefined) {
-      const n100x = result.n100x;
-      const n100y = result.n100y;
-      const remainX = coverageWidth - (n100x * 100);
-      const remainY = coverageHeight - (n100y * 100);
-
-      // 1. 100cm 타일 영역 (메인 영역)
-      for (let y = 0; y < n100y; y++) {
-        for (let x = 0; x < n100x; x++) {
-          tiles.push({
-            x: x * 100,
-            y: y * 100,
-            width: 100,
-            height: 100,
-            size: 100
-          });
-        }
-      }
-
-      // 2. 오른쪽 세로 띠 (50cm 타일)
-      if (remainX > 0 && n100y > 0) {
-        const stripHeight = n100y * 100;
-        const cols50 = Math.ceil(remainX / 50);
-        const rows50 = Math.ceil(stripHeight / 50);
-        for (let y = 0; y < rows50; y++) {
-          for (let x = 0; x < cols50; x++) {
-            const tileX = (n100x * 100) + (x * 50);
-            const tileY = y * 50;
-            const tileWidth = Math.min(50, coverageWidth - tileX);
-            const tileHeight = Math.min(50, stripHeight - tileY);
-            if (tileWidth > 0 && tileHeight > 0) {
-              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
-            }
-          }
-        }
-      }
-
-      // 3. 아래쪽 가로 띠 (50cm 타일)
-      if (n100x > 0 && remainY > 0) {
-        const stripWidth = n100x * 100;
-        const cols50 = Math.ceil(stripWidth / 50);
-        const rows50 = Math.ceil(remainY / 50);
-        for (let y = 0; y < rows50; y++) {
-          for (let x = 0; x < cols50; x++) {
-            const tileX = x * 50;
-            const tileY = (n100y * 100) + (y * 50);
-            const tileWidth = Math.min(50, stripWidth - (x * 50));
-            const tileHeight = Math.min(50, coverageHeight - tileY);
-            if (tileWidth > 0 && tileHeight > 0) {
-              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
-            }
-          }
-        }
-      }
-
-      // 4. 오른쪽 아래 모서리 (50cm 타일)
-      if (remainX > 0 && remainY > 0) {
-        const cols50 = Math.ceil(remainX / 50);
-        const rows50 = Math.ceil(remainY / 50);
-        for (let y = 0; y < rows50; y++) {
-          for (let x = 0; x < cols50; x++) {
-            const tileX = (n100x * 100) + (x * 50);
-            const tileY = (n100y * 100) + (y * 50);
-            const tileWidth = Math.min(50, coverageWidth - tileX);
-            const tileHeight = Math.min(50, coverageHeight - tileY);
-            if (tileWidth > 0 && tileHeight > 0) {
-              tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: 50 });
-            }
-          }
-        }
-      }
-    } else {
-      // 50cm 또는 100cm 단일 타일 (기존 로직)
-      const tileSize = (result && result.nx && coverageWidth / result.nx >= 100) ? 100 : 50;
-      const cols = Math.max(1, Math.ceil(coverageWidth / tileSize));
-      const rows = Math.max(1, Math.ceil(coverageHeight / tileSize));
-
-      for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-          const tileX = x * tileSize;
-          const tileY = y * tileSize;
-          const tileWidth = Math.min(tileSize, coverageWidth - tileX);
-          const tileHeight = Math.min(tileSize, coverageHeight - tileY);
-          if (tileWidth > 0 && tileHeight > 0) {
-            tiles.push({ x: tileX, y: tileY, width: tileWidth, height: tileHeight, size: tileSize });
-          }
-        }
-      }
-    }
-
-    return {
-      type: 'puzzle',
-      space: { width: spaceWidth, height: spaceHeight },
-      coverage: { width: coverageWidth, height: coverageHeight },
-      tiles,
-      gridMinor: minorGrid,
-      gridMajor: majorGrid
-    };
-  }
-
-  // 복합 공간 시각화 (L자, T자 등)
-  function createComplexVisualization(pieces, type, mode) {
-    if (!pieces || pieces.length === 0) return null;
-
-    const minorGrid = 10;
-    const majorGrid = 50;
-    const allTiles = [];
-
-    // Bounding Box 계산
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    pieces.forEach(piece => {
-      minX = Math.min(minX, piece.x);
-      maxX = Math.max(maxX, piece.x + piece.w);
-      minY = Math.min(minY, piece.y);
-      maxY = Math.max(maxY, piece.y + piece.h);
-    });
-    const boundingWidth = maxX - minX;
-    const boundingHeight = maxY - minY;
-
-    // 오프셋 계산 (음수 좌표 처리)
-    const offsetX = -minX;
-    const offsetY = -minY;
-
-    // 각 조각별로 개별 타일 생성 (각 조각의 0,0부터 시작)
-    pieces.forEach((piece, pieceIdx) => {
-      // 각 조각의 실제 계산 결과를 구해서 타일 정보를 가져옴
-      const pieceResult = calculateSimpleSpace('', piece.w, piece.h, type, mode);
-
-      if (!pieceResult || !pieceResult.visualization) return;
-
-      const vis = pieceResult.visualization;
-
-      if (vis.tiles) {
-        // 퍼즐매트: 각 조각의 (0,0)부터 타일 시작
-        vis.tiles.forEach(tile => {
-          allTiles.push({
-            ...tile,
-            x: tile.x + piece.x + offsetX,
-            y: tile.y + piece.y + offsetY,
-            pieceIdx: pieceIdx
-          });
-        });
-      } else if (vis.stripes) {
-        // 롤매트: 각 조각의 (0,0)부터 스트라이프 시작
-        vis.stripes.forEach(stripe => {
-          allTiles.push({
-            ...stripe,
-            x: stripe.x + piece.x + offsetX,
-            y: stripe.y + piece.y + offsetY,
-            pieceIdx: pieceIdx
-          });
-        });
-      }
-    });
-
-    // pieces도 오프셋 적용
-    const normalizedPieces = pieces.map(piece => ({
-      ...piece,
-      x: piece.x + offsetX,
-      y: piece.y + offsetY
-    }));
-
-    return {
-      type: 'complex',
-      space: { width: boundingWidth, height: boundingHeight },
-      coverage: { width: boundingWidth, height: boundingHeight },
-      pieces: normalizedPieces, // 정규화된 조각 정보
-      tiles: allTiles,
-      gridMinor: minorGrid,
-      gridMajor: majorGrid
-    };
-  }
-
-  function createRollVisualization(spaceWidth, spaceHeight, result) {
-    const { coverageWidth = spaceWidth, coverageHeight = spaceHeight, solutions = [], widthAxis, rollLength, splitCount = 1 } = result;
-    if (!solutions || solutions.length === 0) return null;
-
-    const stripes = [];
-    // 길이 방향 실제 롤 길이 (분할 고려)
-    const actualRollLength = rollLength || (widthAxis === 'width' ? coverageHeight : coverageWidth);
-
-    if (widthAxis === 'width') {
-      // 가로로 폭이 나열되고, 세로가 길이 방향
-      let offsetX = 0;
-      solutions.forEach(sol => {
-        for (let i = 0; i < sol.count; i++) {
-          // splitCount만큼 세로로 분할하여 표시
-          for (let split = 0; split < splitCount; split++) {
-            stripes.push({
-              x: offsetX,
-              y: split * actualRollLength,
-              width: sol.width,
-              height: actualRollLength,
-              label: `${sol.width}cm`
-            });
-          }
-          offsetX += sol.width;
-        }
-      });
-    } else {
-      // 세로로 폭이 나열되고, 가로가 길이 방향
-      let offsetY = 0;
-      solutions.forEach(sol => {
-        for (let i = 0; i < sol.count; i++) {
-          // splitCount만큼 가로로 분할하여 표시
-          for (let split = 0; split < splitCount; split++) {
-            stripes.push({
-              x: split * actualRollLength,
-              y: offsetY,
-              width: actualRollLength,
-              height: sol.width,
-              label: `${sol.width}cm`
-            });
-          }
-          offsetY += sol.width;
-        }
-      });
-    }
-
-    return {
-      type: 'roll',
-      space: { width: spaceWidth, height: spaceHeight },
-      coverage: { width: coverageWidth, height: coverageHeight },
-      stripes,
-      widthAxis,
-      gridMinor: 10,
-      gridMajor: 50
-    };
-  }
-
-  function createVisualizationData(spaceType, spaceWidth, spaceHeight, result) {
-    if (!result) return null;
-    if (spaceType === 'roll' || spaceType === 'petRoll') {
-      return createRollVisualization(spaceWidth, spaceHeight, result);
-    }
-    return createPuzzleVisualization(spaceWidth, spaceHeight, result.coverageWidth ?? spaceWidth, result.coverageHeight ?? spaceHeight, result);
-  }
-
+  // ========== 전역 상태 ==========
   let spaceCounter = 0;
   const spaces = [];
   let lastCalculationResults = [];  // 마지막 계산 결과 저장
@@ -327,7 +23,7 @@
   let currentProduct = 'babyRoll';
   let currentThickness = '25';  // 기본 두께
 
-  // 제품 정보 설정
+  // ========== 제품 정보 ==========
   const PRODUCTS = {
     puzzle: {
       name: '퍼즐매트',
@@ -353,6 +49,7 @@
   };
 
 
+  // ========== UI 관리 함수 ==========
   // 두께 선택 UI 업데이트
   function updateThicknessSelector() {
     const $thicknessSelector = document.getElementById('thickness-selector');
@@ -862,47 +559,10 @@
     });
   }
 
-  function ceilDiv(a, b) { return Math.ceil(a / b); }
-  function floorDiv(a, b) { return Math.floor(a / b); }
+  // ========== 유틸리티 함수 ==========
+  // ceilDiv, floorDiv, clampNonNegInt, formatLength, createFitMessages는 utils.js로 이동됨
 
-  function clampNonNegInt(v) {
-    const n = Number(v);
-    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
-  }
-
-  function formatLength(cm) {
-    if (cm <= 0) return '0m';
-    const meters = cm / 100;
-    if (Number.isInteger(meters)) return `${meters}m`;
-    if (Number.isInteger(meters * 10)) return `${meters.toFixed(1)}m`;
-    return `${meters.toFixed(2)}m`;
-  }
-
-  function createFitMessages(actualWidth, actualHeight, coverageWidth, coverageHeight) {
-    const messages = [];
-
-    const widthDiff = coverageWidth - actualWidth;
-    const heightDiff = coverageHeight - actualHeight;
-
-    if (widthDiff > 0) {
-      messages.push(`가로로 ${widthDiff}cm 재단이 필요합니다.`);
-    } else if (widthDiff < 0) {
-      messages.push(`가로로 ${Math.abs(widthDiff)}cm 매트가 부족합니다.`);
-    }
-
-    if (heightDiff > 0) {
-      messages.push(`세로로 ${heightDiff}cm 재단이 필요합니다.`);
-    } else if (heightDiff < 0) {
-      messages.push(`세로로 ${Math.abs(heightDiff)}cm 매트가 부족합니다.`);
-    }
-
-    if (messages.length === 0) {
-      messages.push('가로와 세로가 모두 정확히 맞습니다.');
-    }
-
-    return messages;
-  }
-
+  // ========== 계산 모드 관리 ==========
   // 계산 모드 가져오기 (퍼즐매트는 항상 최적조합 방식 사용)
   function getCalcMode() {
     if (currentProduct === 'puzzle') {
@@ -912,11 +572,7 @@
     return hiddenInput ? hiddenInput.value : 'loose';
   }
 
-  function getModeLabel(mode) {
-    if (mode === 'exact') return '정확히 맞추기';
-    if (mode === 'auto') return '최적조합';
-    return '여유있게 깔기';
-  }
+  // getModeLabel은 utils.js로 이동됨
 
   function updateCalcModeState(mode) {
     const hiddenInput = document.getElementById('calc-mode-value');
@@ -932,781 +588,19 @@
     });
   }
 
-  // 현재 두께 라벨 가져오기
+  // ========== 헬퍼 함수 래퍼 ==========
+  // calculations.js의 함수들이 파라미터를 받는데, app.js는 전역 변수를 사용하므로
+  // 전역 변수를 파라미터로 전달하는 wrapper 함수들
+
   function getThicknessLabel() {
-    if (currentThickness === '25plus') return '25T Plus+';
-    return currentThickness + 'T';
+    return window.getThicknessLabel(currentThickness);
   }
 
-  // 현재 선택된 두께의 가격 가져오기
   function getCurrentPrice() {
-    if (currentProduct === 'puzzle') {
-      return PUZZLE_PRICES[currentThickness] || PUZZLE_PRICES[25];
-    }
-    return null; // 롤매트는 별도 처리
+    return window.getCurrentPrice(currentProduct, currentThickness);
   }
 
-  // 롤매트 두께별 사용 가능한 폭 목록
-  function getAvailableRollWidths() {
-    const thickness = parseInt(currentThickness);
-    return Object.keys(ROLL_PRICES[thickness] || {}).map(Number);
-  }
-
-  // 50cm 매트만 사용하는 계산 (4장 = 1세트)
-  function calculate50(width, height, mode) {
-    const tile = 50;
-    let nx, ny;
-
-    if (mode === 'exact') {
-      // 정확히 맞추기: 올림
-      nx = ceilDiv(width, tile);
-      ny = ceilDiv(height, tile);
-    } else {
-      // 여유있게 깔기: 내림 (공간보다 작게)
-      nx = floorDiv(width, tile);
-      ny = floorDiv(height, tile);
-    }
-
-    const totalTiles = nx * ny;  // 전체 50cm 타일 개수
-    const sets = ceilDiv(totalTiles, 4);  // 4장 단위로 세트 계산
-    const pricePerSet = getCurrentPrice();
-    const price = sets * pricePerSet;
-    const area = width * height;
-    const usedArea = nx * tile * ny * tile;
-    const wastePercent = area > 0 ? Math.round(((usedArea - area) / usedArea) * 100) : 0;
-    const coverageWidth = nx * tile;
-    const coverageHeight = ny * tile;
-
-    return {
-      type: `50cm 매트 (4pcs 세트) - ${getThicknessLabel()}`,
-      nx,
-      ny,
-      totalTiles,
-      sets,
-      pcs: sets,  // 세트 수를 장수로 표시
-      price,
-      wastePercent,
-      breakdown: [`50cm 매트: ${sets}세트 (${totalTiles}개 타일)`],
-      coverageWidth,
-      coverageHeight,
-      fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight)
-    };
-  }
-
-  // 100cm 매트만 사용하는 계산
-  function calculate100(width, height, mode) {
-    const tile = 100;
-    let nx, ny;
-
-    if (mode === 'exact') {
-      // 정확히 맞추기: 올림
-      nx = ceilDiv(width, tile);
-      ny = ceilDiv(height, tile);
-    } else {
-      // 여유있게 깔기: 내림 (공간보다 작게)
-      nx = floorDiv(width, tile);
-      ny = floorDiv(height, tile);
-    }
-
-    const pcs = nx * ny;
-    const pricePerPcs = getCurrentPrice();
-    const price = pcs * pricePerPcs;
-    const area = width * height;
-    const usedArea = nx * tile * ny * tile;
-    const wastePercent = area > 0 ? Math.round(((usedArea - area) / usedArea) * 100) : 0;
-    const coverageWidth = nx * tile;
-    const coverageHeight = ny * tile;
-
-    return {
-      type: `100cm 매트 (1pcs) - ${getThicknessLabel()}`,
-      nx,
-      ny,
-      pcs,
-      price,
-      wastePercent,
-      breakdown: [`100cm 매트: ${pcs}장`],
-      coverageWidth,
-      coverageHeight,
-      fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight)
-    };
-  }
-
-  // 롤매트 계산 함수
-  function calculateRollMat(width, height, mode, { isPet = false } = {}) {
-    // 1. 어느 면을 길이로 할지 결정
-    const width50 = width % 50 === 0;
-    const height50 = height % 50 === 0;
-
-    let targetWidth, targetLength;
-    let widthAxis = 'width';
-
-    if (width50 && !height50) {
-      targetLength = width;
-      targetWidth = height;
-      widthAxis = 'height';
-    } else if (!width50 && height50) {
-      targetLength = height;
-      targetWidth = width;
-      widthAxis = 'width';
-    } else if (width <= height) {
-      targetWidth = width;
-      targetLength = height;
-      widthAxis = 'width';
-    } else {
-      targetWidth = height;
-      targetLength = width;
-      widthAxis = 'height';
-    }
-
-    // 2. 가능한 폭 조합 수집
-    const thickness = parseInt(currentThickness);
-    const looseCombos = generateRollWidthCombinations(targetWidth, 'loose');
-    const exactCombos = generateRollWidthCombinations(targetWidth, 'exact');
-    const extendedExactCombos = generateRollWidthCombinations(
-      targetWidth,
-      'exact',
-      { exactOverageCap: EXTENDED_EXACT_OVERAGE_CAP_CM }
-    );
-
-    const combinationMap = new Map();
-    function addCombinationList(list, source) {
-      if (!list) return;
-      list.forEach(combo => {
-        const key = combo.solutions
-          .map(sol => `${sol.width}x${sol.count}`)
-          .sort()
-          .join('|');
-        if (!combinationMap.has(key)) {
-          combinationMap.set(key, { ...combo, source });
-        }
-      });
-    }
-
-    addCombinationList(looseCombos, 'loose');
-    addCombinationList(exactCombos, 'exact');
-    addCombinationList(extendedExactCombos, 'exactExtended');
-
-    const combinationCandidates = Array.from(combinationMap.values());
-    if (combinationCandidates.length === 0) {
-      return null;
-    }
-
-    const preferredRule = (PREFERRED_WIDTH_RULES || []).find(rule => targetWidth >= rule.min && targetWidth <= rule.max);
-    if (preferredRule) {
-      combinationCandidates.forEach(candidate => {
-        if (candidate.solutions.length !== 1) return;
-        const only = candidate.solutions[0];
-        const matched = preferredRule.prefer?.some(pref => pref.width === only.width && pref.count === only.count && pref.mode === candidate.mode);
-        if (matched) {
-          candidate.preferred = true;
-        }
-      });
-    }
-
-    // 3. 길이 계산 (50cm 단위, 최대 길이 제한 적용)
-    const maxLength = ROLL_MAX_LENGTH[thickness] || Infinity;
-    let calculatedLength;
-    const lengthCeil = ceilDiv(targetLength, 50) * 50;
-    const lengthFloor = Math.floor(targetLength / 50) * 50;
-    calculatedLength = lengthCeil;
-
-    const floorShortage = targetLength - lengthFloor;
-    if (lengthFloor > 0 && floorShortage > 0 && floorShortage <= LENGTH_RELAXATION_THRESHOLD_CM) {
-      calculatedLength = lengthFloor;
-    }
-
-    if (calculatedLength <= 0) {
-      calculatedLength = 50;
-    }
-
-    let rollLength;
-    let splitCount;
-    if (calculatedLength <= maxLength) {
-      rollLength = calculatedLength;
-      splitCount = 1;
-    } else {
-      const fullRolls = Math.ceil(calculatedLength / maxLength);
-      rollLength = Math.ceil(calculatedLength / fullRolls / 50) * 50;
-      splitCount = fullRolls;
-    }
-
-    // 4. 조합 평가 및 가격 계산
-    const lengthIn50cm = rollLength / 50;
-    const evaluatedCombos = combinationCandidates.map(combo => {
-      const usedWidth = combo.solutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
-      const widthDiff = usedWidth - targetWidth;
-      const wasteAbsCm = Math.abs(widthDiff);
-
-      let comboPrice = 0;
-      let valid = true;
-      combo.solutions.forEach(sol => {
-        const pricePerUnit = ROLL_PRICES[thickness][sol.width];
-        if (pricePerUnit == null) {
-          valid = false;
-          return;
-        }
-        comboPrice += pricePerUnit * lengthIn50cm * sol.count * splitCount;
-      });
-      if (!valid) return null;
-
-      const baseRollCount = combo.solutions.reduce((sum, sol) => sum + sol.count, 0);
-      const rollCountWithSplit = baseRollCount * splitCount;
-
-      return {
-        ...combo,
-        price: comboPrice,
-        usedWidth,
-        widthDiff,
-        wasteAbsCm,
-        rollCountWithSplit,
-        preferred: combo.preferred === true
-      };
-    }).filter(Boolean);
-
-    if (evaluatedCombos.length === 0) {
-      return null;
-    }
-
-    evaluatedCombos.sort((a, b) => {
-      if (Math.abs(a.wasteAbsCm - b.wasteAbsCm) > 0.0001) {
-        return a.wasteAbsCm - b.wasteAbsCm;
-      }
-      if (Math.abs(a.price - b.price) > 0.0001) {
-        return a.price - b.price;
-      }
-      const aCovers = a.widthDiff >= 0 ? 1 : 0;
-      const bCovers = b.widthDiff >= 0 ? 1 : 0;
-      if (aCovers !== bCovers) {
-        return bCovers - aCovers;
-      }
-      if (a.preferred !== b.preferred) {
-        return a.preferred ? -1 : 1;
-      }
-      if (a.sameWidth !== b.sameWidth) {
-        return b.sameWidth - a.sameWidth;
-      }
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority;
-      }
-      return a.rollCountWithSplit - b.rollCountWithSplit;
-    });
-
-    const bestCombo = evaluatedCombos[0];
-    const solutions = bestCombo.solutions;
-    const totalPrice = bestCombo.price;
-    const breakdown = [];
-
-    solutions.forEach(sol => {
-      const rollGroupCount = sol.count * splitCount;
-      const rollLengthCm = rollLength;
-      const countText = splitCount > 1 ? `${sol.count}개 × ${splitCount}롤` : `${sol.count}개`;
-      if (isPet) {
-        const units = lengthIn50cm * rollGroupCount;
-        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × 50cm 길이 × ${units}개 (${rollLengthCm}cm 길이 × ${rollGroupCount}개)`);
-      } else {
-        breakdown.push(`${getThicknessLabel()} - ${sol.width}cm 폭 × ${rollLengthCm}cm 길이 × ${countText}`);
-      }
-    });
-
-    // 5. 낭비율 및 커버리지 계산
-    const actualArea = width * height;
-    const usedWidth = bestCombo.usedWidth;
-    const totalUsedLength = rollLength * splitCount;
-    const usedArea = usedWidth * totalUsedLength;
-    const wastePercent = actualArea > 0 ? Math.round(((usedArea - actualArea) / usedArea) * 100) : 0;
-    const coverageWidth = widthAxis === 'width' ? usedWidth : totalUsedLength;
-    const coverageHeight = widthAxis === 'width' ? totalUsedLength : usedWidth;
-    const totalRolls = bestCombo.rollCountWithSplit;
-    const totalRollUnits = lengthIn50cm * totalRolls;
-
-    let shippingMemo = '';
-    if (isPet && solutions.length > 0) {
-      const cutRequestList = solutions.map(sol => {
-        const meters = formatLength(rollLength);
-        const totalRollsPerWidth = sol.count * splitCount;
-        const rollText = splitCount > 1 ? `${totalRollsPerWidth}롤` : `${sol.count}롤`;
-        return `${sol.width}cm 폭 ${meters} ${rollText}`;
-      });
-      shippingMemo = `► 배송메모: ${cutRequestList.join(', ')}으로 재단요청`;
-      breakdown.push(shippingMemo);
-    }
-
-    const rollLabel = isPet ? '애견 롤매트' : '유아 롤매트';
-
-    const complementLines = [];
-
-    return {
-      type: `${rollLabel} - ${getThicknessLabel()}`,
-      targetWidth,
-      targetLength,
-      calculatedLength,
-      rollLength,
-      splitCount,
-      solutions,
-      totalPrice,
-      price: totalPrice,
-      wastePercent,
-      breakdown: (complementLines.length > 0)
-        ? [...breakdown, ...complementLines]
-        : breakdown,
-      coverageWidth,
-      coverageHeight,
-      fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight),
-      pcs: totalRolls,
-      rollCount: totalRolls,
-      totalRollUnits,
-      shippingMemo,
-      widthAxis
-    };
-  }
-
-  // 최적의 롤매트 폭 조합 찾기
-  function generateRollWidthCombinations(targetWidth, mode, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
-    const thickness = parseInt(currentThickness);
-    const availableWidths = getAvailableRollWidths();
-    const combinations = [];
-
-    // 1. 모든 가능한 단일 폭 조합
-    for (let width of availableWidths) {
-      for (let count = 1; count <= 10; count++) {
-        const totalWidth = width * count;
-
-        if (mode === 'exact') {
-          if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
-            const waste = totalWidth - targetWidth;
-            const wastePercent = (waste / totalWidth) * 100;
-
-            combinations.push({
-              mode,
-              solutions: [{ width, count }],
-              totalWidth,
-              waste,
-              wastePercent,
-              rollCount: count,
-              priority: getRollWidthPriority(width, thickness),
-              sameWidth: true
-            });
-
-            break; // 더 많은 개수는 불필요
-          }
-        } else {
-          if (totalWidth <= targetWidth) {
-            const shortage = targetWidth - totalWidth;
-            const shortagePercent = (shortage / targetWidth) * 100;
-
-            combinations.push({
-              mode,
-              solutions: [{ width, count }],
-              totalWidth,
-              waste: -shortage,
-              wastePercent: -shortagePercent,
-              rollCount: count,
-              priority: getRollWidthPriority(width, thickness),
-              sameWidth: true
-            });
-          } else {
-            break;
-          }
-        }
-      }
-    }
-
-    // 2. 2개 폭 조합 (가능한 모든 폭 쌍)
-    const pairs = [];
-    for (let i = 0; i < availableWidths.length; i++) {
-      for (let j = i + 1; j < availableWidths.length; j++) {
-        pairs.push([availableWidths[i], availableWidths[j]]);
-      }
-    }
-
-    for (let [w1, w2] of pairs) {
-      for (let count1 = 1; count1 <= 5; count1++) {
-        for (let count2 = 1; count2 <= 5; count2++) {
-          const totalWidth = (w1 * count1) + (w2 * count2);
-
-          if (mode === 'exact') {
-            if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
-              const waste = totalWidth - targetWidth;
-              const wastePercent = (waste / totalWidth) * 100;
-              const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
-
-              combinations.push({
-                mode,
-                solutions: [
-                  { width: w1, count: count1 },
-                  { width: w2, count: count2 }
-                ],
-                totalWidth,
-                waste,
-                wastePercent,
-                rollCount: count1 + count2,
-                priority: avgPriority,
-                sameWidth: false
-              });
-            }
-          } else {
-            if (totalWidth <= targetWidth) {
-              const shortage = targetWidth - totalWidth;
-              const shortagePercent = (shortage / targetWidth) * 100;
-              const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
-
-              combinations.push({
-                mode,
-                solutions: [
-                  { width: w1, count: count1 },
-                  { width: w2, count: count2 }
-                ],
-                totalWidth,
-                waste: -shortage,
-                wastePercent: -shortagePercent,
-                rollCount: count1 + count2,
-                priority: avgPriority,
-                sameWidth: false
-              });
-            }
-          }
-        }
-      }
-    }
-
-    combinations.sort((a, b) => {
-      const wasteA = Math.abs(a.wastePercent ?? 0);
-      const wasteB = Math.abs(b.wastePercent ?? 0);
-
-      if (Math.abs(wasteA - wasteB) > 5) {
-        return wasteA - wasteB;
-      }
-
-      if (a.sameWidth !== b.sameWidth) {
-        return b.sameWidth - a.sameWidth;
-      }
-
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority;
-      }
-
-      return (a.rollCount || 0) - (b.rollCount || 0);
-    });
-
-    return combinations;
-  }
-
-  // 복합 매트 최적화 계산 (100cm 우선, 나머지 50cm 4장 세트)
-  function calculateHybrid(width, height, modeOrOptions) {
-    const options = typeof modeOrOptions === 'string'
-      ? {
-          roundRemainX: modeOrOptions === 'exact' ? ceilDiv : floorDiv,
-          roundRemainY: modeOrOptions === 'exact' ? ceilDiv : floorDiv
-        }
-      : (modeOrOptions || {});
-
-    const roundRemainX = options.roundRemainX || floorDiv;
-    const roundRemainY = options.roundRemainY || floorDiv;
-
-    // 100cm로 채울 수 있는 최대 개수
-    const n100x = Math.floor(width / 100);
-    const n100y = Math.floor(height / 100);
-
-    // 나머지 공간
-    const remainX = width - (n100x * 100);
-    const remainY = height - (n100y * 100);
-
-    let total100 = 0;
-    let total50Tiles = 0;  // 50cm 타일 개수
-    const breakdown = [];
-
-    // 1. 메인 영역 (100cm로 채우기)
-    if (n100x > 0 && n100y > 0) {
-      total100 = n100x * n100y;
-    }
-
-    const remainXTiles = remainX > 0 ? roundRemainX(remainX, 50) : 0;
-    const remainYTiles = remainY > 0 ? roundRemainY(remainY, 50) : 0;
-
-    // 2. 오른쪽 세로 띠 (remainX × (n100y * 100))
-    if (remainX > 0 && n100y > 0 && remainXTiles > 0) {
-      const stripHeightTiles = ceilDiv(n100y * 100, 50); // 100cm 단위라 항상 정수
-      total50Tiles += remainXTiles * stripHeightTiles;
-    }
-
-    // 3. 아래쪽 가로 띠 (n100x * 100 × remainY)
-    if (n100x > 0 && remainY > 0 && remainYTiles > 0) {
-      const stripWidthTiles = ceilDiv(n100x * 100, 50); // 100cm 단위라 항상 정수
-      total50Tiles += stripWidthTiles * remainYTiles;
-    }
-
-    // 4. 오른쪽 아래 모서리 (remainX × remainY)
-    if (remainX > 0 && remainY > 0 && remainXTiles > 0 && remainYTiles > 0) {
-      total50Tiles += remainXTiles * remainYTiles;
-    }
-
-    // 50cm 타일을 4장 단위 세트로 변환
-    const total50Sets = ceilDiv(total50Tiles, 4);
-
-    // 가격 계산 (현재 선택된 두께 기준)
-    const pricePerPcs = getCurrentPrice();
-    const price = (total100 * pricePerPcs) + (total50Sets * pricePerPcs);
-
-    // 낭비율 계산
-    const area = width * height;
-    const usedArea100 = total100 * 100 * 100;
-    const usedArea50 = total50Tiles * 50 * 50;
-    const totalUsedArea = usedArea100 + usedArea50;
-    const wastePercent = area > 0 ? Math.round(((totalUsedArea - area) / totalUsedArea) * 100) : 0;
-
-    const coverageWidth = (n100x * 100) + (remainXTiles * 50);
-    const coverageHeight = (n100y * 100) + (remainYTiles * 50);
-
-    // 상세 내역
-    if (total100 > 0) breakdown.push(`${getThicknessLabel()} 100×100cm 1pcs: ${total100}장`);
-    if (total50Sets > 0) {
-      if (total50Tiles === total50Sets * 4) {
-        // 모든 조각을 사용하는 경우
-        breakdown.push(`${getThicknessLabel()} 50×50cm 4pcs: ${total50Sets}장`);
-      } else {
-        // 일부 조각만 사용하는 경우
-        breakdown.push(`${getThicknessLabel()} 50×50cm 4pcs: ${total50Sets}장 (${total50Tiles}조각 사용)`);
-      }
-    }
-
-    return {
-      type: `복합 매트 (최적화) - ${getThicknessLabel()}`,
-      n100x,
-      n100y,
-      total100,
-      total50: total50Sets,  // 세트 수
-      total50Tiles,  // 실제 타일 개수
-      totalPcs: total100 + total50Sets,
-      price,
-      wastePercent,
-      breakdown,
-      coverageWidth,
-      coverageHeight,
-      fitMessages: createFitMessages(width, height, coverageWidth, coverageHeight)
-    };
-  }
-
-  function calculatePuzzleAuto(width, height) {
-    const looseResult = calculateHybrid(width, height, 'loose');
-    const coverageWidthLoose = looseResult.coverageWidth || 0;
-    const coverageHeightLoose = looseResult.coverageHeight || 0;
-    const widthShortage = Math.max(0, width - coverageWidthLoose);
-    const heightShortage = Math.max(0, height - coverageHeightLoose);
-
-    const needsWidthAdjust = widthShortage >= 25;
-    const needsHeightAdjust = heightShortage >= 25;
-
-    if (!needsWidthAdjust && !needsHeightAdjust) {
-      return {
-        ...looseResult,
-        autoModeSource: 'loose'
-      };
-    }
-
-    const hybridResult = calculateHybrid(width, height, {
-      roundRemainX: needsWidthAdjust ? ceilDiv : floorDiv,
-      roundRemainY: needsHeightAdjust ? ceilDiv : floorDiv
-    });
-
-    let autoModeSource = 'loose';
-    if (needsWidthAdjust && needsHeightAdjust) {
-      autoModeSource = 'exact';
-    } else if (needsWidthAdjust) {
-      autoModeSource = 'width';
-    } else if (needsHeightAdjust) {
-      autoModeSource = 'height';
-    }
-
-    return {
-      ...hybridResult,
-      autoModeSource
-    };
-  }
-
-  function calculateSpace(name, width, height, type, mode, space = null) {
-    // ========== 라우터: 복합 공간 vs 단순 공간 분기 ==========
-    
-    // [1번 트랙: 단순 공간] pieces가 없거나 1개인 경우 (기존 로직)
-    if (!space || !space.pieces || space.pieces.length === 0) {
-      return calculateSimpleSpace(name, width, height, type, mode);
-    }
-    
-    // [2번 트랙: 복합 공간] pieces가 2개 이상인 경우 (합산 계산)
-    if (space.pieces.length === 1) {
-      const piece = space.pieces[0];
-      return calculateSimpleSpace(name, piece.w, piece.h, type, mode);
-    }
-    
-    // pieces가 2개 이상 - 합산 계산
-    return calculateComplexSpace(name, space.pieces, type, mode);
-  }
-
-  // 단순 공간 계산 (기존 로직)
-  function calculateSimpleSpace(name, width, height, type, mode) {
-    const W = clampNonNegInt(width);
-    const H = clampNonNegInt(height);
-
-    if (W === 0 || H === 0) {
-      return null; // 빈 공간
-    }
-
-    let result;
-    if (type === '50') {
-      const appliedMode = mode === 'auto' ? 'loose' : mode;
-      result = calculate50(W, H, appliedMode);
-    } else if (type === '100') {
-      const appliedMode = mode === 'auto' ? 'loose' : mode;
-      result = calculate100(W, H, appliedMode);
-    } else if (type === 'roll') {
-      const appliedMode = mode === 'auto' ? 'loose' : mode;
-      result = calculateRollMat(W, H, appliedMode, { isPet: false });
-    } else if (type === 'petRoll') {
-      const appliedMode = mode === 'auto' ? 'loose' : mode;
-      result = calculateRollMat(W, H, appliedMode, { isPet: true });
-    } else { // hybrid (퍼즐매트 - 항상 최적조합 방식 사용)
-      result = calculatePuzzleAuto(W, H);
-    }
-
-    const visualization = createVisualizationData(type, W, H, result);
-
-    // 퍼즐매트(hybrid)는 항상 최적조합 방식 사용
-    const isPuzzleAuto = type === 'hybrid';
-    const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
-    const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
-
-    return {
-      name: name,
-      width: W,
-      height: H,
-      spaceType: type,
-      visualization,
-      ...result,
-      mode: getModeLabel(displayMode),
-      modeKey: outputModeKey
-    };
-  }
-
-  // 복합 공간 계산 (분리 계산 후 합산)
-  function calculateComplexSpace(name, pieces, type, mode) {
-    // 퍼즐매트(hybrid)는 항상 최적조합 방식 사용
-    const isPuzzleAuto = type === 'hybrid';
-    const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
-    const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
-    let autoModeSource = null;
-
-    const totalResult = {
-      name: name,
-      mode: getModeLabel(displayMode),
-      modeKey: outputModeKey,
-      spaceType: type,
-      price: 0,
-      breakdown: [],
-      total50: 0,
-      total100: 0,
-      totalPcs: 0,
-      wastePercent: 0,
-      fitMessages: [],
-      coverageWidth: 0,
-      coverageHeight: 0
-    };
-
-    // 각 조각을 개별 계산하여 합산
-    // 조각별 상세 정보 저장
-    const pieceDetails = [];
-
-    pieces.forEach((piece, idx) => {
-      const pieceResult = calculateSimpleSpace(
-        piece.name || `조각 ${idx + 1}`,
-        piece.w,
-        piece.h,
-        type,
-        mode
-      );
-
-      if (pieceResult) {
-        // 조각별 상세 정보 저장
-        pieceDetails.push({
-          name: piece.name || `조각 ${idx + 1}`,
-          width: piece.w,
-          height: piece.h,
-          coverageWidth: pieceResult.coverageWidth,
-          coverageHeight: pieceResult.coverageHeight,
-          fitMessages: pieceResult.fitMessages || []
-        });
-
-        // 가격 합산
-        totalResult.price += pieceResult.price || 0;
-
-        // breakdown에 조각명 추가하여 합산
-        if (pieceResult.breakdown && pieceResult.breakdown.length > 0) {
-          pieceResult.breakdown.forEach(line => {
-            totalResult.breakdown.push(`[${piece.name || `조각 ${idx + 1}`}] ${line}`);
-          });
-        } else {
-          totalResult.breakdown.push(`[${piece.name || `조각 ${idx + 1}`}] ${pieceResult.type || ''}`);
-        }
-
-        // 매트 수량 합산
-        totalResult.total50 += pieceResult.total50 || 0;
-        totalResult.total100 += pieceResult.total100 || 0;
-        totalResult.totalPcs += pieceResult.totalPcs || pieceResult.pcs || 0;
-
-        // 롤 관련 합산
-        if (pieceResult.rollCount) {
-          totalResult.rollCount = (totalResult.rollCount || 0) + pieceResult.rollCount;
-        }
-        if (pieceResult.totalRollUnits) {
-          totalResult.totalRollUnits = (totalResult.totalRollUnits || 0) + pieceResult.totalRollUnits;
-        }
-      }
-
-      if (isPuzzleAuto && pieceResult && pieceResult.autoModeSource && !autoModeSource) {
-        autoModeSource = pieceResult.autoModeSource;
-      }
-    });
-
-    // 조각별 상세 정보를 결과에 추가
-    totalResult.pieceDetails = pieceDetails;
-
-    // 총 낭비율 계산 (전체 면적 기준)
-    const totalArea = pieces.reduce((sum, p) => sum + (p.w * p.h), 0);
-    const totalUsedArea = pieces.reduce((sum, p) => {
-      const pieceResult = calculateSimpleSpace('', p.w, p.h, type, mode);
-      if (pieceResult) {
-        const usedArea = (pieceResult.coverageWidth || p.w) * (pieceResult.coverageHeight || p.h);
-        return sum + usedArea;
-      }
-      return sum;
-    }, 0);
-    totalResult.wastePercent = totalUsedArea > 0 ? Math.round(((totalUsedArea - totalArea) / totalUsedArea) * 100) : 0;
-
-    // 타입에 따른 기본 타입 라벨
-    totalResult.type = type === 'hybrid' ? '복합 매트 (분리 계산 합산) - ' + getThicknessLabel() :
-                       type === 'roll' ? '복합 유아 롤매트 (분리 계산 합산) - ' + getThicknessLabel() :
-                       type === 'petRoll' ? '복합 애견 롤매트 (분리 계산 합산) - ' + getThicknessLabel() :
-                       `복합 매트 (분리 계산 합산) - ${getThicknessLabel()}`;
-
-    // 복합 공간 시각화 생성
-    totalResult.visualization = createComplexVisualization(pieces, type, mode);
-    
-    // width, height도 추가 (결과 표시용)
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    pieces.forEach(piece => {
-      minX = Math.min(minX, piece.x);
-      maxX = Math.max(maxX, piece.x + piece.w);
-      minY = Math.min(minY, piece.y);
-      maxY = Math.max(maxY, piece.y + piece.h);
-    });
-    totalResult.width = maxX - minX;
-    totalResult.height = maxY - minY;
-
-    if (isPuzzleAuto) {
-      totalResult.autoModeSource = autoModeSource || 'loose';
-    }
-
-    return totalResult;
-  }
-
+  // ========== 메인 계산 함수 ==========
   function calculate() {
     // 복사 버튼 상태 초기화
     resetCopyButton();
@@ -1723,52 +617,99 @@
     let totalRollUnits = 0;
     const shippingMemos = [];
 
-    // 각 공간 계산
-    spaces.forEach((space) => {
-      // 복합 공간을 위한 첫 번째 조각 동기화 (입력값이 변경되면 자동 업데이트)
-      const spaceW = clampNonNegInt(space.getW());
-      const spaceH = clampNonNegInt(space.getH());
-      
-      // 조각이 1개 이상 있고, 첫 번째 조각이 현재 입력값과 다르면 업데이트
-      if (space.pieces && space.pieces.length >= 1) {
-        space.pieces[0].w = spaceW;
-        space.pieces[0].h = spaceH;
-      }
-
-      const result = calculateSpace(
-        space.getName(),
-        space.getW(),
-        space.getH(),
-        space.getType(),
-        calcMode,
-        space // space 객체 전체 전달
-      );
-      if (result) {
-        spaceResults.push({ index: space.id, ...result });
-        totalPrice += result.price;
-        activeSpaces++;
-
-        // 타입별 집계
-        if (result.total50) total50 += result.total50;
-        if (result.total100) total100 += result.total100;
-        if (result.pcs && space.getType() === '50') total50 += result.pcs;
-        if (result.pcs && space.getType() === '100') total100 += result.pcs;
-
-        // 재단/여유 안내 통계
-        if (result.fitMessages && result.fitMessages.length > 0) {
-          const hasTrim = result.fitMessages.some(msg => msg.includes('재단이 필요'));
-          const hasGap = result.fitMessages.some(msg => msg.includes('매트가 부족합니다'));
-          if (hasTrim) spacesNeedingTrim += 1;
-          if (hasGap) spacesWithGap += 1;
+    // 복잡한 공간 모드인 경우
+    if (currentSpaceMode === 'complex') {
+      if (complexSpacePieces.length > 0) {
+        // 현재 제품에 따른 타입 결정
+        let productType = 'hybrid'; // 퍼즐매트 기본값
+        if (currentProduct === 'babyRoll') {
+          productType = 'roll';
+        } else if (currentProduct === 'petRoll') {
+          productType = 'petRoll';
         }
 
-        if (result.rollCount) totalRolls += result.rollCount;
-        if (result.totalRollUnits) totalRollUnits += result.totalRollUnits;
-        if (result.shippingMemo && result.shippingMemo !== '배송메모 : 없음') {
-          shippingMemos.push(result.shippingMemo);
+        // 복잡한 공간 계산 (calculations.js의 전역 함수 사용)
+        const result = window.calculateComplexSpace(
+          '복잡한 공간',
+          complexSpacePieces.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, name: p.name, index: p.index })),
+          productType,
+          calcMode,
+          currentProduct,
+          currentThickness
+        );
+
+        if (result) {
+          spaceResults.push({ index: 0, ...result });
+          totalPrice += result.price;
+          activeSpaces = 1;
+
+          if (result.total50) total50 += result.total50;
+          if (result.total100) total100 += result.total100;
+
+          if (result.fitMessages && result.fitMessages.length > 0) {
+            const hasTrim = result.fitMessages.some(msg => msg.includes('재단이 필요'));
+            const hasGap = result.fitMessages.some(msg => msg.includes('매트가 부족합니다'));
+            if (hasTrim) spacesNeedingTrim += 1;
+            if (hasGap) spacesWithGap += 1;
+          }
+
+          if (result.rollCount) totalRolls += result.rollCount;
+          if (result.totalRollUnits) totalRollUnits += result.totalRollUnits;
+          if (result.shippingMemo && result.shippingMemo !== '배송메모 : 없음') {
+            shippingMemos.push(result.shippingMemo);
+          }
         }
       }
-    });
+    } else {
+      // 단순 공간 모드 (기존 로직)
+      spaces.forEach((space) => {
+        // 복합 공간을 위한 첫 번째 조각 동기화 (입력값이 변경되면 자동 업데이트)
+        const spaceW = clampNonNegInt(space.getW());
+        const spaceH = clampNonNegInt(space.getH());
+
+        // 조각이 1개 이상 있고, 첫 번째 조각이 현재 입력값과 다르면 업데이트
+        if (space.pieces && space.pieces.length >= 1) {
+          space.pieces[0].w = spaceW;
+          space.pieces[0].h = spaceH;
+        }
+
+        const result = window.calculateSpace(
+          space.getName(),
+          space.getW(),
+          space.getH(),
+          space.getType(),
+          calcMode,
+          space, // space 객체 전체 전달
+          currentProduct,
+          currentThickness
+        );
+        if (result) {
+          spaceResults.push({ index: space.id, ...result });
+          totalPrice += result.price;
+          activeSpaces++;
+
+          // 타입별 집계
+          if (result.total50) total50 += result.total50;
+          if (result.total100) total100 += result.total100;
+          if (result.pcs && space.getType() === '50') total50 += result.pcs;
+          if (result.pcs && space.getType() === '100') total100 += result.pcs;
+
+          // 재단/여유 안내 통계
+          if (result.fitMessages && result.fitMessages.length > 0) {
+            const hasTrim = result.fitMessages.some(msg => msg.includes('재단이 필요'));
+            const hasGap = result.fitMessages.some(msg => msg.includes('매트가 부족합니다'));
+            if (hasTrim) spacesNeedingTrim += 1;
+            if (hasGap) spacesWithGap += 1;
+          }
+
+          if (result.rollCount) totalRolls += result.rollCount;
+          if (result.totalRollUnits) totalRollUnits += result.totalRollUnits;
+          if (result.shippingMemo && result.shippingMemo !== '배송메모 : 없음') {
+            shippingMemos.push(result.shippingMemo);
+          }
+        }
+      });
+    }
 
     let fitSummary = '';
     if (activeSpaces > 0) {
@@ -2211,8 +1152,13 @@
     }
     svg.appendChild(gridGroup);
 
-    // L자 공간 조각들을 점선으로 그림
+    // L자 공간 조각들을 점선으로 그림 (겹친 부분은 내부 경계선만 표시)
     if (pieces && pieces.length > 0) {
+      // 조각별 색상 정의 (UI와 동일)
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
+      // 전체 영역을 회색으로 표시
+      const allPiecesGroup = document.createElementNS(SVG_NS, 'g');
       pieces.forEach((piece, idx) => {
         const pieceRect = document.createElementNS(SVG_NS, 'rect');
         pieceRect.setAttribute('x', piece.x);
@@ -2220,14 +1166,73 @@
         pieceRect.setAttribute('width', piece.w);
         pieceRect.setAttribute('height', piece.h);
         pieceRect.setAttribute('fill', 'rgba(226, 232, 240, 0.35)');
-        pieceRect.setAttribute('stroke', '#94a3b8');
-        pieceRect.setAttribute('stroke-dasharray', '6 4');
-        svg.appendChild(pieceRect);
+        pieceRect.setAttribute('stroke', 'none');
+        allPiecesGroup.appendChild(pieceRect);
+      });
+      svg.appendChild(allPiecesGroup);
+
+      // 각 조각의 경계선을 점선으로 표시
+      pieces.forEach((piece, idx) => {
+        const pieceColorIndex = piece.index !== undefined ? piece.index : idx;
+        const pieceColor = colors[pieceColorIndex % colors.length];
+        // 각 변에 대해 다른 조각과 겹치는지 확인
+        const edges = [
+          { x1: piece.x, y1: piece.y, x2: piece.x + piece.w, y2: piece.y }, // 위
+          { x1: piece.x + piece.w, y1: piece.y, x2: piece.x + piece.w, y2: piece.y + piece.h }, // 오른쪽
+          { x1: piece.x, y1: piece.y + piece.h, x2: piece.x + piece.w, y2: piece.y + piece.h }, // 아래
+          { x1: piece.x, y1: piece.y, x2: piece.x, y2: piece.y + piece.h } // 왼쪽
+        ];
+
+        edges.forEach(edge => {
+          // 이 변이 다른 조각의 내부에 있는지 확인
+          let isInternalEdge = false;
+          pieces.forEach((otherPiece, otherIdx) => {
+            if (idx === otherIdx) return;
+
+            // 수평선인 경우
+            if (edge.y1 === edge.y2) {
+              const y = edge.y1;
+              if (y > otherPiece.y && y < otherPiece.y + otherPiece.h) {
+                // 선분이 다른 조각과 겹치는지 확인
+                const overlapStart = Math.max(edge.x1, otherPiece.x);
+                const overlapEnd = Math.min(edge.x2, otherPiece.x + otherPiece.w);
+                if (overlapStart < overlapEnd) {
+                  isInternalEdge = true;
+                }
+              }
+            }
+            // 수직선인 경우
+            else if (edge.x1 === edge.x2) {
+              const x = edge.x1;
+              if (x > otherPiece.x && x < otherPiece.x + otherPiece.w) {
+                const overlapStart = Math.max(edge.y1, otherPiece.y);
+                const overlapEnd = Math.min(edge.y2, otherPiece.y + otherPiece.h);
+                if (overlapStart < overlapEnd) {
+                  isInternalEdge = true;
+                }
+              }
+            }
+          });
+
+          // 경계선 그리기 (조각 색상 사용)
+          const line = document.createElementNS(SVG_NS, 'line');
+          line.setAttribute('x1', edge.x1);
+          line.setAttribute('y1', edge.y1);
+          line.setAttribute('x2', edge.x2);
+          line.setAttribute('y2', edge.y2);
+          line.setAttribute('stroke', isInternalEdge ? '#64748b' : pieceColor);
+          line.setAttribute('stroke-width', isInternalEdge ? 1.2 : 2.5);
+          line.setAttribute('stroke-dasharray', isInternalEdge ? '4 2' : '8 4');
+          line.setAttribute('opacity', isInternalEdge ? 0.7 : 1.0);
+          svg.appendChild(line);
+        });
       });
     }
 
     // 매트 타일 그리기
     if (tiles && tiles.length > 0) {
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+
       tiles.forEach((tile, idx) => {
         const tileRect = document.createElementNS(SVG_NS, 'rect');
         tileRect.setAttribute('x', tile.x);
@@ -2235,21 +1240,26 @@
         tileRect.setAttribute('width', tile.width);
         tileRect.setAttribute('height', tile.height);
 
+        // 타일이 속한 조각의 색상 결정 (조각 인덱스 우선 사용)
+        const pieceIndex = tile.pieceIndex !== undefined ? tile.pieceIndex : 0;
+        const tileColor = colors[pieceIndex % colors.length];
+        const rgb = tileColor.match(/\w\w/g).map(x => parseInt(x, 16));
+
         // 타일 타입에 따라 다른 스타일 적용
         if (tile.size === 100) {
           // 100cm 퍼즐매트
-          tileRect.setAttribute('fill', 'rgba(37, 99, 235, 0.6)');
-          tileRect.setAttribute('stroke', '#1e40af');
+          tileRect.setAttribute('fill', `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.6)`);
+          tileRect.setAttribute('stroke', tileColor);
           tileRect.setAttribute('stroke-width', 1.2);
         } else if (tile.size === 50) {
           // 50cm 퍼즐매트
-          tileRect.setAttribute('fill', idx % 2 === 0 ? 'rgba(59, 130, 246, 0.5)' : 'rgba(96, 165, 250, 0.55)');
-          tileRect.setAttribute('stroke', '#1d4ed8');
+          tileRect.setAttribute('fill', `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.5)`);
+          tileRect.setAttribute('stroke', tileColor);
           tileRect.setAttribute('stroke-width', 0.6);
         } else {
           // 롤매트 또는 기타
-          tileRect.setAttribute('fill', 'rgba(59, 130, 246, 0.5)');
-          tileRect.setAttribute('stroke', '#1d4ed8');
+          tileRect.setAttribute('fill', `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.55)`);
+          tileRect.setAttribute('stroke', tileColor);
           tileRect.setAttribute('stroke-width', 0.8);
         }
 
@@ -2265,6 +1275,7 @@
           label.setAttribute('font-weight', '500');
           label.setAttribute('text-anchor', 'middle');
           label.setAttribute('dominant-baseline', 'middle');
+          // 가로x세로 크기만 표시
           label.textContent = `${tile.width}×${tile.height}cm`;
           svg.appendChild(label);
         }
@@ -2592,6 +1603,215 @@
   function initCalcModeTabs() {
     // 계산 방식 섹션이 제거되어 더 이상 필요 없음
   }
+
+  // ========== 복잡한 공간 관리 ==========
+  const $spaceModeSimple = document.getElementById('space-mode-simple');
+  const $spaceModeComplex = document.getElementById('space-mode-complex');
+  const $simpleSpaceSection = document.getElementById('simple-space-section');
+  const $complexSpaceSection = document.getElementById('complex-space-section');
+  const $addPiece = document.getElementById('add-piece');
+  const $piecesContainer = document.getElementById('pieces-container');
+  // const $complexPreviewCanvas = document.getElementById('complex-preview-canvas'); // 미리보기 제거됨
+
+  let currentSpaceMode = 'simple'; // 'simple' | 'complex'
+  let complexSpacePieces = []; // 복잡한 공간의 조각들
+  let pieceIdCounter = 0;
+
+  // 공간 모드 전환 핸들러
+  function handleSpaceModeChange(mode) {
+    currentSpaceMode = mode;
+
+    if (mode === 'simple') {
+      $simpleSpaceSection.style.display = 'block';
+      $complexSpaceSection.style.display = 'none';
+    } else {
+      $simpleSpaceSection.style.display = 'none';
+      $complexSpaceSection.style.display = 'block';
+
+      // 복잡한 공간 모드로 전환 시 초기화
+      if (complexSpacePieces.length === 0) {
+        addPieceToComplex(); // 첫 번째 조각 자동 추가
+      }
+    }
+
+    calculate();
+  }
+
+  // 공간 모드 라디오 버튼 이벤트 리스너
+  $spaceModeSimple.addEventListener('change', () => {
+    if ($spaceModeSimple.checked) {
+      handleSpaceModeChange('simple');
+    }
+  });
+
+  $spaceModeComplex.addEventListener('change', () => {
+    if ($spaceModeComplex.checked) {
+      handleSpaceModeChange('complex');
+    }
+  });
+
+  // 조각 추가 (복잡한 공간)
+  function addPieceToComplex() {
+    const pieceId = pieceIdCounter++;
+    const pieceIndex = complexSpacePieces.length;
+
+    const piece = {
+      id: pieceId,
+      index: pieceIndex, // 색상 결정용 인덱스
+      name: `조각 ${pieceIndex + 1}`,
+      x: 0,
+      y: 0,
+      w: 300,
+      h: 200
+    };
+
+    complexSpacePieces.push(piece);
+    renderPieceUI(piece);
+    updateComplexPreview();
+  }
+
+  // 조각 UI 렌더링
+  function renderPieceUI(piece) {
+    // 조각 색상 결정
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    const pieceColor = colors[(piece.index || 0) % colors.length];
+
+    const $pieceCard = document.createElement('div');
+    $pieceCard.className = 'space-card';
+    $pieceCard.id = `piece-${piece.id}`;
+    $pieceCard.style.marginBottom = '12px';
+    $pieceCard.style.padding = '16px';
+    $pieceCard.style.border = `2px solid ${pieceColor}`;
+    $pieceCard.style.borderRadius = '8px';
+    $pieceCard.style.background = '#ffffff';
+    $pieceCard.style.position = 'relative';
+
+    $pieceCard.innerHTML = `
+      <div style="position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 4px; background: ${pieceColor}; border: 1px solid rgba(0,0,0,0.1);"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-right: 30px;">
+        <input type="text" value="${piece.name}" id="piece-name-${piece.id}"
+               style="font-weight: 500; border: 1px solid #e2e8f0; padding: 4px 8px; border-radius: 4px; flex: 1; max-width: 180px;">
+        <button class="icon-btn" id="remove-piece-${piece.id}" title="조각 삭제" style="position: absolute; top: 8px; right: 36px;">×</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #64748b;">가로 (cm)</label>
+          <input type="number" id="piece-w-${piece.id}" value="${piece.w}" min="10"
+                 style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 4px;">
+        </div>
+        <div>
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #64748b;">세로 (cm)</label>
+          <input type="number" id="piece-h-${piece.id}" value="${piece.h}" min="10"
+                 style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 4px;">
+        </div>
+      </div>
+
+      <div style="margin-bottom: 0;">
+        <label style="display: block; margin-bottom: 4px; font-size: 12px; color: #64748b;">위치 좌표 (cm)</label>
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+          <input type="number" id="piece-x-${piece.id}" value="${piece.x}"
+                 style="width: 70px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px;">
+          <button class="mini-arrow-btn" data-piece="${piece.id}" data-axis="x" data-dir="-1" style="padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: white; cursor: pointer; font-size: 16px; line-height: 1;">←</button>
+          <button class="mini-arrow-btn" data-piece="${piece.id}" data-axis="x" data-dir="1" style="padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: white; cursor: pointer; font-size: 16px; line-height: 1;">→</button>
+          <input type="number" id="piece-y-${piece.id}" value="${piece.y}"
+                 style="width: 70px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px; margin-left: 4px;">
+          <button class="mini-arrow-btn" data-piece="${piece.id}" data-axis="y" data-dir="-1" style="padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: white; cursor: pointer; font-size: 16px; line-height: 1;">↑</button>
+          <button class="mini-arrow-btn" data-piece="${piece.id}" data-axis="y" data-dir="1" style="padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: white; cursor: pointer; font-size: 16px; line-height: 1;">↓</button>
+        </div>
+      </div>
+    `;
+
+    $piecesContainer.appendChild($pieceCard);
+
+    // 이벤트 리스너 등록
+    const $name = document.getElementById(`piece-name-${piece.id}`);
+    const $w = document.getElementById(`piece-w-${piece.id}`);
+    const $h = document.getElementById(`piece-h-${piece.id}`);
+
+    $name.addEventListener('input', () => {
+      piece.name = $name.value;
+      updateComplexPreview();
+    });
+
+    $w.addEventListener('input', () => {
+      piece.w = clampNonNegInt($w.value);
+      updateComplexPreview();
+      calculate();
+    });
+
+    $h.addEventListener('input', () => {
+      piece.h = clampNonNegInt($h.value);
+      updateComplexPreview();
+      calculate();
+    });
+
+    const $x = document.getElementById(`piece-x-${piece.id}`);
+    const $y = document.getElementById(`piece-y-${piece.id}`);
+    const $removeBtn = document.getElementById(`remove-piece-${piece.id}`);
+
+    $x.addEventListener('input', () => {
+      piece.x = parseInt($x.value) || 0;
+      updateComplexPreview();
+      calculate();
+    });
+
+    $y.addEventListener('input', () => {
+      piece.y = parseInt($y.value) || 0;
+      updateComplexPreview();
+      calculate();
+    });
+
+    $removeBtn.addEventListener('click', () => {
+      removePieceFromComplex(piece.id);
+    });
+
+    // 미니 화살표 버튼 이벤트 리스너
+    $pieceCard.querySelectorAll('.mini-arrow-btn').forEach($btn => {
+      $btn.addEventListener('click', () => {
+        const pieceId = parseInt($btn.dataset.piece);
+        const axis = $btn.dataset.axis;
+        const dir = parseInt($btn.dataset.dir);
+        const step = 50; // 50cm 단위
+
+        const piece = complexSpacePieces.find(p => p.id === pieceId);
+        if (!piece) return;
+
+        if (axis === 'x') {
+          piece.x += dir * step;
+          $x.value = piece.x;
+        } else if (axis === 'y') {
+          piece.y += dir * step;
+          $y.value = piece.y;
+        }
+
+        updateComplexPreview();
+        calculate();
+      });
+    });
+  }
+
+
+  // 조각 삭제
+  function removePieceFromComplex(pieceId) {
+    const index = complexSpacePieces.findIndex(p => p.id === pieceId);
+    if (index > -1) {
+      complexSpacePieces.splice(index, 1);
+      const $pieceCard = document.getElementById(`piece-${pieceId}`);
+      if ($pieceCard) $pieceCard.remove();
+      updateComplexPreview();
+      calculate();
+    }
+  }
+
+  // 복잡한 공간 미리보기 업데이트 (SVG 시각화)
+  function updateComplexPreview() {
+    // 미리보기 캔버스 제거됨 - 아무 작업 안함
+  }
+
+  // 조각 추가 버튼 이벤트 리스너
+  $addPiece.addEventListener('click', addPieceToComplex);
 
   // 이벤트 리스너 등록
   $addSpace.addEventListener('click', addSpace);

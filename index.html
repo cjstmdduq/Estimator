@@ -54,10 +54,44 @@
           <section class="card">
             <h2>공간 입력</h2>
 
-            <div id="spaces-container"></div>
+            <!-- 공간 모드 선택 -->
+            <div class="space-mode-selector" style="margin-bottom: 20px;">
+              <label style="display: block; margin-bottom: 8px; font-weight: 500;">공간 유형</label>
+              <div style="display: flex; gap: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="radio" name="space-mode" value="simple" checked id="space-mode-simple">
+                  <span>단순 공간</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                  <input type="radio" name="space-mode" value="complex" id="space-mode-complex">
+                  <span>복잡한 공간</span>
+                </label>
+              </div>
+            </div>
 
-            <div class="button-group">
-              <button id="add-space" class="secondary">+ 공간 추가</button>
+            <!-- 단순 공간 섹션 (기존) -->
+            <div id="simple-space-section">
+              <div id="spaces-container"></div>
+
+              <div class="button-group">
+                <button id="add-space" class="secondary">+ 공간 추가</button>
+              </div>
+            </div>
+
+            <!-- 복잡한 공간 섹션 (새로 추가) -->
+            <div id="complex-space-section" style="display: none;">
+              <div style="margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 14px; color: #64748b;">
+                여러 개의 직사각형 조각을 연결하여 L자, T자 등 복잡한 형태의 공간을 만들 수 있습니다.
+              </div>
+
+              <!-- 조각 목록 -->
+              <div id="pieces-container">
+                <!-- 조각들이 동적으로 추가됨 -->
+              </div>
+
+              <div class="button-group">
+                <button id="add-piece" class="secondary">+ 조각 추가</button>
+              </div>
             </div>
           </section>
         </div>
@@ -102,6 +136,11 @@
     </main>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="./js/constants.js"></script>
+    <script src="./js/prices.js"></script>
+    <script src="./js/utils.js"></script>
+    <script src="./js/calculations.js"></script>
+    <script src="./js/visualization.js"></script>
     <script src="./app.js"></script>
   </body>
   </html>
