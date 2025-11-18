@@ -121,9 +121,6 @@
 
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
-    
-    // 복합 공간 컨트롤 표시/숨김 업데이트
-    updateComplexSpaceControls();
   }
 
   // 제품 변경 시 자동 재계산
