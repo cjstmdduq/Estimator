@@ -420,31 +420,7 @@
     // 두께 선택 UI 업데이트
     updateThicknessSelector();
 
-    // 계산 방식 섹션 표시 여부 업데이트
-    if ($calcModeSection) {
-      if (productType === 'puzzle') {
-        $calcModeSection.style.display = 'block';
-      } else {
-        $calcModeSection.style.display = 'none';
-      }
-    }
-
-    if ($calcModeAutoButton) {
-      if (productType === 'puzzle') {
-        $calcModeAutoButton.style.removeProperty('display');
-        $calcModeAutoButton.disabled = false;
-        if (getCalcMode() === 'auto') {
-          updateCalcModeState('auto');
-        }
-      } else {
-        $calcModeAutoButton.style.display = 'none';
-        $calcModeAutoButton.disabled = true;
-        $calcModeAutoButton.classList.remove('active');
-        if (getCalcMode() === 'auto') {
-          updateCalcModeState('loose');
-        }
-      }
-    }
+    // 계산 방식 섹션 제거됨 (퍼즐매트는 항상 최적조합 방식 사용)
 
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
@@ -487,9 +463,6 @@
         // 제품 정보 업데이트
         const productType = btn.dataset.product;
         updateProductDisplay(productType);
-        if (productType === 'puzzle') {
-          updateCalcModeState('auto');
-        }
       });
     });
   }
@@ -930,8 +903,11 @@
     return messages;
   }
 
-  // 계산 모드 가져오기
+  // 계산 모드 가져오기 (퍼즐매트는 항상 최적조합 방식 사용)
   function getCalcMode() {
+    if (currentProduct === 'puzzle') {
+      return 'auto';
+    }
     const hiddenInput = document.getElementById('calc-mode-value');
     return hiddenInput ? hiddenInput.value : 'loose';
   }
@@ -1587,17 +1563,14 @@
     } else if (type === 'petRoll') {
       const appliedMode = mode === 'auto' ? 'loose' : mode;
       result = calculateRollMat(W, H, appliedMode, { isPet: true });
-    } else { // hybrid
-      if (mode === 'auto') {
-        result = calculatePuzzleAuto(W, H);
-      } else {
-        result = calculateHybrid(W, H, mode);
-      }
+    } else { // hybrid (퍼즐매트 - 항상 최적조합 방식 사용)
+      result = calculatePuzzleAuto(W, H);
     }
 
     const visualization = createVisualizationData(type, W, H, result);
 
-    const isPuzzleAuto = mode === 'auto' && type === 'hybrid';
+    // 퍼즐매트(hybrid)는 항상 최적조합 방식 사용
+    const isPuzzleAuto = type === 'hybrid';
     const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
     const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
 
@@ -1615,7 +1588,8 @@
 
   // 복합 공간 계산 (분리 계산 후 합산)
   function calculateComplexSpace(name, pieces, type, mode) {
-    const isPuzzleAuto = mode === 'auto' && type === 'hybrid';
+    // 퍼즐매트(hybrid)는 항상 최적조합 방식 사용
+    const isPuzzleAuto = type === 'hybrid';
     const outputModeKey = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
     const displayMode = isPuzzleAuto ? 'auto' : outputModeKey;
     let autoModeSource = null;
@@ -1867,14 +1841,11 @@
               totalCompositionHTML += `<div style="margin-left: 30px; margin-top: 4px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.</div>`;
             }
 
-            // 재단/여유 안내
-            if (piece.fitMessages && piece.fitMessages.length > 0) {
-              piece.fitMessages.forEach(msg => {
-                if (!msg.includes('경고') && !msg.includes('경계선')) {
-                  totalCompositionHTML += `<div style="margin-left: 30px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
-                }
-              });
-            }
+            // 재단/여유 안내 (변환된 메시지 사용)
+            const convertedPieceMessages = convertFitMessagesForEstimate(piece.fitMessages);
+            convertedPieceMessages.forEach(msg => {
+              totalCompositionHTML += `<div style="margin-left: 30px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
+            });
 
             totalCompositionHTML += `<div style="margin-bottom: 8px;"></div>`;
           });
@@ -1900,13 +1871,12 @@
           if (Number.isFinite(r.coverageWidth) && Number.isFinite(r.coverageHeight)) {
             totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 10px; color: #64748b; font-size: 12px;">매트의 크기는 총 ${r.coverageWidth}cm × ${r.coverageHeight}cm 입니다.</div>`;
           }
-          // 재단/여유 안내 메시지 표시 (작은 글씨)
-          if (r.fitMessages && r.fitMessages.length > 0) {
+          // 재단/여유 안내 메시지 표시 (변환된 메시지 사용)
+          const convertedMessages = convertFitMessagesForEstimate(r.fitMessages);
+          if (convertedMessages.length > 0) {
             totalCompositionHTML += `<div style="margin-top: 6px;"></div>`;
-            r.fitMessages.forEach(msg => {
-              if (!msg.includes('경고') && !msg.includes('경계선')) {
-                totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
-              }
+            convertedMessages.forEach(msg => {
+              totalCompositionHTML += `<div style="margin-left: 15px; margin-top: 4px; color: #64748b; font-size: 12px;">${msg}</div>`;
             });
           }
         }
@@ -1961,6 +1931,40 @@
   }
 
 
+  // 견적서용 메시지 변환 함수
+  function convertFitMessagesForEstimate(fitMessages) {
+    if (!fitMessages || !Array.isArray(fitMessages)) {
+      return [];
+    }
+
+    const convertedMessages = [];
+    let hasTrimMessage = false;
+    let hasGapMessage = false;
+
+    fitMessages.forEach(msg => {
+      if (typeof msg === 'string' && !msg.includes('경고') && !msg.includes('경계선')) {
+        if (msg.includes('재단이 필요합니다')) {
+          hasTrimMessage = true;
+        } else if (msg.includes('매트가 부족합니다')) {
+          hasGapMessage = true;
+        } else {
+          // 다른 메시지들은 그대로 유지
+          convertedMessages.push(msg);
+        }
+      }
+    });
+
+    // 변환된 메시지 추가 (한 번만)
+    if (hasTrimMessage) {
+      convertedMessages.push('약간의 재단으로 여백 없이 설치 가능합니다.');
+    }
+    if (hasGapMessage) {
+      convertedMessages.push('재단 없이 설치 가능합니다.');
+    }
+
+    return convertedMessages;
+  }
+
   function buildSpaceQuickSummary(result, idx) {
     const spaceName = result.name || `공간 ${idx + 1}`;
     const width = Number.isFinite(result.width) ? result.width : null;
@@ -2002,14 +2006,11 @@
           summary.lines.push(`매트의 크기는 총 ${piece.coverageWidth}cm × ${piece.coverageHeight}cm 입니다.`);
         }
 
-        // 재단/여유 안내
-        if (piece.fitMessages && piece.fitMessages.length > 0) {
-          piece.fitMessages.forEach(msg => {
-            if (typeof msg === 'string' && !msg.includes('경고') && !msg.includes('경계선')) {
-              summary.lines.push(msg);
-            }
-          });
-        }
+        // 재단/여유 안내 (견적서용으로 변환)
+        const convertedPieceMessages = convertFitMessagesForEstimate(piece.fitMessages);
+        convertedPieceMessages.forEach(msg => {
+          summary.lines.push(msg);
+        });
 
         // 조각 간 구분 빈 줄 (마지막 조각이 아닐 때만)
         if (pieceIdx < result.pieceDetails.length - 1) {
@@ -2040,14 +2041,11 @@
         summary.lines.push(`매트의 크기는 총 ${result.coverageWidth}cm × ${result.coverageHeight}cm 입니다.`);
       }
 
-      // 재단/여유 안내
-      if (result.fitMessages && Array.isArray(result.fitMessages) && result.fitMessages.length > 0) {
-        result.fitMessages.forEach(msg => {
-          if (typeof msg === 'string' && !msg.includes('경고') && !msg.includes('경계선')) {
-            summary.lines.push(msg);
-          }
-        });
-      }
+      // 재단/여유 안내 (견적서용으로 변환)
+      const convertedMessages = convertFitMessagesForEstimate(result.fitMessages);
+      convertedMessages.forEach(msg => {
+        summary.lines.push(msg);
+      });
     }
     
     // breakdown이 없을 때도 기본 정보 추가
@@ -2590,25 +2588,9 @@
     });
   }
 
-  // 계산 방식 탭 초기화
+  // 계산 방식 탭 초기화 (제거됨 - 퍼즐매트는 항상 최적조합 방식 사용)
   function initCalcModeTabs() {
-    calcModeButtons = Array.from(document.querySelectorAll('.calc-mode-btn'));
-
-    calcModeButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.mode;
-        if (!mode) return;
-        if (mode === 'auto' && currentProduct !== 'puzzle') return;
-
-        updateCalcModeState(mode);
-        calculate();
-      });
-    });
-
-    // 퍼즐이 기본 제품이 아니면 기본 모드를 'auto'로 설정하지 않음
-    const inputMode = getCalcMode();
-    const initialMode = currentProduct === 'puzzle' ? inputMode : (inputMode === 'auto' ? 'loose' : inputMode);
-    updateCalcModeState(initialMode);
+    // 계산 방식 섹션이 제거되어 더 이상 필요 없음
   }
 
   // 이벤트 리스너 등록
