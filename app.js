@@ -795,8 +795,8 @@
           line.setAttribute('x2', edge.x2);
           line.setAttribute('y2', edge.y2);
           line.setAttribute('stroke', isInternalEdge ? '#64748b' : pieceColor);
-          line.setAttribute('stroke-width', isInternalEdge ? 1.2 : 2.5);
-          line.setAttribute('stroke-dasharray', isInternalEdge ? '4 2' : '8 4');
+          line.setAttribute('stroke-width', isInternalEdge ? 0.8 : 2.5);
+          line.setAttribute('stroke-dasharray', isInternalEdge ? '3 2' : '8 4');
           line.setAttribute('opacity', isInternalEdge ? 0.7 : 1.0);
           svg.appendChild(line);
         });
@@ -1084,7 +1084,8 @@
       spaceRect.setAttribute('height', spaceHeight);
       spaceRect.setAttribute('fill', 'rgba(226, 232, 240, 0.35)');
       spaceRect.setAttribute('stroke', '#94a3b8');
-      spaceRect.setAttribute('stroke-dasharray', '6 4');
+      spaceRect.setAttribute('stroke-width', 0.8);
+      spaceRect.setAttribute('stroke-dasharray', '4 3');
       svg.appendChild(spaceRect);
 
       const coverageRect = document.createElementNS(SVG_NS, 'rect');
@@ -1321,11 +1322,93 @@
   const $complexSpaceSection = document.getElementById('complex-space-section');
   const $addPiece = document.getElementById('add-piece');
   const $piecesContainer = document.getElementById('pieces-container');
+  const $complexTemplateButtons = document.getElementById('complex-template-buttons');
   // const $complexPreviewCanvas = document.getElementById('complex-preview-canvas'); // 미리보기 제거됨
 
   let currentSpaceMode = 'simple'; // 'simple' | 'complex'
   let complexSpacePieces = []; // 복합공간의 조각들
   let pieceIdCounter = 0;
+  let activeTemplateId = null;
+
+  const complexSpaceTemplates = [
+    {
+      id: 'l-basic',
+      name: 'ㄱ자 기본형',
+      pieces: [
+        { name: '메인 존', x: 0, y: 0, w: 400, h: 250 },
+        { name: '확장 존', x: 400, y: 100, w: 200, h: 300 }
+      ]
+    },
+    {
+      id: 'l-wide',
+      name: 'ㄴ자 확장형',
+      pieces: [
+        { name: '거실 1', x: 0, y: 0, w: 350, h: 250 },
+        { name: '거실 2', x: 350, y: 0, w: 250, h: 200 },
+        { name: '놀이존', x: 350, y: 200, w: 180, h: 200 }
+      ]
+    },
+    {
+      id: 't-corridor',
+      name: 'ㅗ자 복도형',
+      pieces: [
+        { name: '몸체', x: 200, y: 0, w: 250, h: 450 },
+        { name: '좌측 날개', x: 0, y: 120, w: 200, h: 180 },
+        { name: '우측 날개', x: 450, y: 120, w: 200, h: 180 }
+      ]
+    },
+    {
+      id: 'u-playzone',
+      name: 'ㄷ자 놀이존',
+      pieces: [
+        { name: '왼쪽', x: 0, y: 0, w: 220, h: 400 },
+        { name: '중앙', x: 220, y: 0, w: 220, h: 200 },
+        { name: '오른쪽', x: 440, y: 0, w: 220, h: 400 }
+      ]
+    }
+  ];
+
+  function setActiveTemplate(id) {
+    activeTemplateId = id;
+    if (!$complexTemplateButtons) return;
+    $complexTemplateButtons.querySelectorAll('.template-btn').forEach($btn => {
+      $btn.classList.toggle('active', $btn.dataset.complexTemplate === id);
+    });
+  }
+
+  function applyComplexTemplate(templateId) {
+    const template = complexSpaceTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    complexSpacePieces = [];
+    $piecesContainer.innerHTML = '';
+
+    template.pieces.forEach((pieceData, idx) => {
+      const piece = {
+        id: pieceIdCounter++,
+        index: idx,
+        name: pieceData.name || `조각 ${idx + 1}`,
+        x: pieceData.x || 0,
+        y: pieceData.y || 0,
+        w: pieceData.w || 100,
+        h: pieceData.h || 100
+      };
+      complexSpacePieces.push(piece);
+      renderPieceUI(piece);
+    });
+
+    setActiveTemplate(templateId);
+    updateComplexPreview();
+    calculate();
+  }
+
+  if ($complexTemplateButtons) {
+    $complexTemplateButtons.addEventListener('click', event => {
+      const target = event.target.closest('[data-complex-template]');
+      if (!target) return;
+      applyComplexTemplate(target.dataset.complexTemplate);
+    });
+  }
 
   // 공간 모드 전환 핸들러
   function handleSpaceModeChange(mode) {
@@ -1364,6 +1447,9 @@
   function addPieceToComplex() {
     const pieceId = pieceIdCounter++;
     const pieceIndex = complexSpacePieces.length;
+    if (activeTemplateId) {
+      setActiveTemplate(null);
+    }
 
     const piece = {
       id: pieceId,

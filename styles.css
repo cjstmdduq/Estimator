@@ -554,3 +554,66 @@ button {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
+
+.template-selector {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 16px;
+  background: #f8fafc;
+}
+
+.template-selector__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.template-selector__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.template-selector__desc {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.template-selector__hint {
+  color: #94a3b8;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.template-btn {
+  border: 1px solid #cbd5f5;
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1d4ed8;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.template-btn:hover {
+  background: #e0e7ff;
+  border-color: #94a3ff;
+  color: #1e3a8a;
+}
+
+.template-btn.active {
+  background: #1d4ed8;
+  color: white;
+  border-color: #1e40af;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+}
