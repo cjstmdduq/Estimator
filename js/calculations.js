@@ -370,27 +370,37 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
   }
 
   evaluatedCombos.sort((a, b) => {
-    if (Math.abs(a.wasteAbsCm - b.wasteAbsCm) > 0.0001) {
-      return a.wasteAbsCm - b.wasteAbsCm;
-    }
-    if (Math.abs(a.price - b.price) > 0.0001) {
-      return a.price - b.price;
-    }
+    // 1순위: 커버 여부 (커버되는 것 우선) - 필수!
     const aCovers = a.widthDiff >= 0 ? 1 : 0;
     const bCovers = b.widthDiff >= 0 ? 1 : 0;
     if (aCovers !== bCovers) {
       return bCovers - aCovers;
     }
+    // 2순위: 롤 개수 (적을수록 좋음)
+    if (a.rollCountWithSplit !== b.rollCountWithSplit) {
+      return a.rollCountWithSplit - b.rollCountWithSplit;
+    }
+    // 3순위: 낭비 (적을수록 좋음)
+    if (Math.abs(a.wasteAbsCm - b.wasteAbsCm) > 0.0001) {
+      return a.wasteAbsCm - b.wasteAbsCm;
+    }
+    // 4순위: 가격 (저렴할수록 좋음)
+    if (Math.abs(a.price - b.price) > 0.0001) {
+      return a.price - b.price;
+    }
+    // 5순위: preferred 여부
     if (a.preferred !== b.preferred) {
       return a.preferred ? -1 : 1;
     }
+    // 6순위: 동일 폭 여부
     if (a.sameWidth !== b.sameWidth) {
       return b.sameWidth - a.sameWidth;
     }
+    // 7순위: 우선순위 값
     if (a.priority !== b.priority) {
       return a.priority - b.priority;
     }
-    return a.rollCountWithSplit - b.rollCountWithSplit;
+    return 0;
   });
 
   const bestCombo = evaluatedCombos[0];
@@ -935,11 +945,11 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
       }
     });
 
-    // 최적의 방향 선택 (가격 우선)
+    // 최적의 방향 선택 (롤 개수 우선 - 임시)
     if (candidates.length > 0) {
       candidates.sort((a, b) => {
-        if (Math.abs(a.price - b.price) > 0.0001) return a.price - b.price;
         if (a.rollCount !== b.rollCount) return a.rollCount - b.rollCount;
+        if (Math.abs(a.price - b.price) > 0.0001) return a.price - b.price;
         return a.wastePercent - b.wastePercent;
       });
 
