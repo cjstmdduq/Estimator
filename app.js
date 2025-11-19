@@ -1323,14 +1323,17 @@
   const $addPiece = document.getElementById('add-piece');
   const $piecesContainer = document.getElementById('pieces-container');
   const $complexTemplateButtons = document.getElementById('complex-template-buttons');
+  const $complexConnectivityWarning = document.getElementById('complex-connectivity-warning');
   // const $complexPreviewCanvas = document.getElementById('complex-preview-canvas'); // 미리보기 제거됨
 
   let currentSpaceMode = 'simple'; // 'simple' | 'complex'
   let complexSpacePieces = []; // 복합공간의 조각들
   let pieceIdCounter = 0;
   let activeTemplateId = null;
+  let connectivityWarningTimer = null;
 
   const complexSpaceTemplates = [
+    // 기존 데이터 (유지)
     {
       id: 'l-basic',
       name: 'ㄱ자 기본형',
@@ -1339,34 +1342,125 @@
         { name: '확장 존', x: 400, y: 100, w: 200, h: 300 }
       ]
     },
+
+    // 신규 추가 데이터
     {
-      id: 'l-wide',
-      name: 'ㄴ자 확장형',
+      id: 'type-84-4bay',
+      name: '84타입 4베이 (판상형)',
       pieces: [
-        { name: '거실 1', x: 0, y: 0, w: 350, h: 250 },
-        { name: '거실 2', x: 350, y: 0, w: 250, h: 200 },
-        { name: '놀이존', x: 350, y: 200, w: 180, h: 200 }
+        { name: '복도', x: 0, y: 150, w: 400, h: 120 },
+        { name: '거실', x: 400, y: 0, w: 450, h: 450 },
+        { name: '주방/식당', x: 400, y: 450, w: 450, h: 280 }
       ]
     },
     {
-      id: 't-corridor',
-      name: 'ㅗ자 복도형',
+      id: 'type-59-3bay',
+      name: '59타입 3베이 (기본형)',
       pieces: [
-        { name: '몸체', x: 200, y: 0, w: 250, h: 450 },
-        { name: '좌측 날개', x: 0, y: 120, w: 200, h: 180 },
-        { name: '우측 날개', x: 450, y: 120, w: 200, h: 180 }
+        { name: '복도', x: 0, y: 120, w: 300, h: 110 },
+        { name: '거실', x: 300, y: 0, w: 360, h: 360 },
+        { name: '주방', x: 300, y: 360, w: 360, h: 240 }
       ]
     },
     {
-      id: 'u-playzone',
-      name: 'ㄷ자 놀이존',
+      id: 'type-tower-l',
+      name: '타워형 (이면개방)',
       pieces: [
-        { name: '왼쪽', x: 0, y: 0, w: 220, h: 400 },
-        { name: '중앙', x: 220, y: 0, w: 220, h: 200 },
-        { name: '오른쪽', x: 440, y: 0, w: 220, h: 400 }
+        { name: '진입 복도', x: 0, y: 0, w: 120, h: 500 },
+        { name: '연결 복도', x: 120, y: 380, w: 200, h: 120 },
+        { name: '거실', x: 320, y: 200, w: 400, h: 450 },
+        { name: '주방(안쪽)', x: 320, y: 0, w: 300, h: 200 }
+      ]
+    },
+    {
+      id: 'type-large-open',
+      name: '대형 평수 (광폭형)',
+      pieces: [
+        { name: '메인 복도', x: 0, y: 200, w: 600, h: 130 },
+        { name: '거실', x: 600, y: 0, w: 550, h: 550 },
+        { name: '다이닝룸', x: 600, y: 550, w: 400, h: 300 }
       ]
     }
   ];
+
+  function hideConnectivityWarning() {
+    if (!$complexConnectivityWarning) return;
+    $complexConnectivityWarning.style.display = 'none';
+    if (connectivityWarningTimer) {
+      clearTimeout(connectivityWarningTimer);
+      connectivityWarningTimer = null;
+    }
+  }
+
+  function showConnectivityWarning() {
+    if (!$complexConnectivityWarning) return;
+    $complexConnectivityWarning.style.display = 'flex';
+    if (connectivityWarningTimer) {
+      clearTimeout(connectivityWarningTimer);
+    }
+    connectivityWarningTimer = setTimeout(() => {
+      if ($complexConnectivityWarning) {
+        $complexConnectivityWarning.style.display = 'none';
+      }
+      connectivityWarningTimer = null;
+    }, 3500);
+  }
+
+  function rectanglesTouching(a, b) {
+    if (!a || !b) return false;
+    const noOverlap =
+      a.x + a.w < b.x ||
+      b.x + b.w < a.x ||
+      a.y + a.h < b.y ||
+      b.y + b.h < a.y;
+    if (noOverlap) return false;
+
+    const overlapWidth = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const overlapHeight = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    return overlapWidth > 0 || overlapHeight > 0;
+  }
+
+  function arePiecesConnected(piecesList = complexSpacePieces) {
+    if (!piecesList || piecesList.length <= 1) return true;
+
+    const visited = new Set();
+    const queue = [];
+    queue.push(piecesList[0]);
+    visited.add(piecesList[0].id);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      piecesList.forEach(piece => {
+        if (visited.has(piece.id) || piece.id === current.id) return;
+        if (rectanglesTouching(current, piece)) {
+          visited.add(piece.id);
+          queue.push(piece);
+        }
+      });
+    }
+
+    return visited.size === piecesList.length;
+  }
+
+  function tryUpdatePieceValue(piece, key, value, $input) {
+    const previousValue = piece[key];
+    if (previousValue === value) {
+      return true;
+    }
+
+    piece[key] = value;
+    if (!arePiecesConnected()) {
+      piece[key] = previousValue;
+      if ($input) {
+        $input.value = previousValue;
+      }
+      showConnectivityWarning();
+      return false;
+    }
+
+    hideConnectivityWarning();
+    return true;
+  }
 
   function setActiveTemplate(id) {
     activeTemplateId = id;
@@ -1398,6 +1492,7 @@
     });
 
     setActiveTemplate(templateId);
+    hideConnectivityWarning();
     updateComplexPreview();
     calculate();
   }
@@ -1417,6 +1512,7 @@
     if (mode === 'simple') {
       $simpleSpaceSection.style.display = 'block';
       $complexSpaceSection.style.display = 'none';
+      hideConnectivityWarning();
     } else {
       $simpleSpaceSection.style.display = 'none';
       $complexSpaceSection.style.display = 'block';
@@ -1451,6 +1547,8 @@
       setActiveTemplate(null);
     }
 
+    const anchorPiece = complexSpacePieces[complexSpacePieces.length - 1];
+
     const piece = {
       id: pieceId,
       index: pieceIndex, // 색상 결정용 인덱스
@@ -1461,9 +1559,15 @@
       h: 200
     };
 
+    if (anchorPiece) {
+      piece.x = anchorPiece.x + anchorPiece.w;
+      piece.y = anchorPiece.y;
+    }
+
     complexSpacePieces.push(piece);
     renderPieceUI(piece);
     updateComplexPreview();
+    hideConnectivityWarning();
   }
 
   // 조각 UI 렌더링
@@ -1532,15 +1636,21 @@
     });
 
     $w.addEventListener('input', () => {
-      piece.w = clampNonNegInt($w.value);
-      updateComplexPreview();
-      calculate();
+      const newWidth = Math.max(10, clampNonNegInt($w.value));
+      $w.value = newWidth;
+      if (tryUpdatePieceValue(piece, 'w', newWidth, $w)) {
+        updateComplexPreview();
+        calculate();
+      }
     });
 
     $h.addEventListener('input', () => {
-      piece.h = clampNonNegInt($h.value);
-      updateComplexPreview();
-      calculate();
+      const newHeight = Math.max(10, clampNonNegInt($h.value));
+      $h.value = newHeight;
+      if (tryUpdatePieceValue(piece, 'h', newHeight, $h)) {
+        updateComplexPreview();
+        calculate();
+      }
     });
 
     const $x = document.getElementById(`piece-x-${piece.id}`);
@@ -1548,15 +1658,23 @@
     const $removeBtn = document.getElementById(`remove-piece-${piece.id}`);
 
     $x.addEventListener('input', () => {
-      piece.x = parseInt($x.value) || 0;
-      updateComplexPreview();
-      calculate();
+      const parsed = parseInt($x.value, 10);
+      const newX = isNaN(parsed) ? 0 : parsed;
+      $x.value = newX;
+      if (tryUpdatePieceValue(piece, 'x', newX, $x)) {
+        updateComplexPreview();
+        calculate();
+      }
     });
 
     $y.addEventListener('input', () => {
-      piece.y = parseInt($y.value) || 0;
-      updateComplexPreview();
-      calculate();
+      const parsed = parseInt($y.value, 10);
+      const newY = isNaN(parsed) ? 0 : parsed;
+      $y.value = newY;
+      if (tryUpdatePieceValue(piece, 'y', newY, $y)) {
+        updateComplexPreview();
+        calculate();
+      }
     });
 
     $removeBtn.addEventListener('click', () => {
@@ -1574,16 +1692,15 @@
         const piece = complexSpacePieces.find(p => p.id === pieceId);
         if (!piece) return;
 
-        if (axis === 'x') {
-          piece.x += dir * step;
-          $x.value = piece.x;
-        } else if (axis === 'y') {
-          piece.y += dir * step;
-          $y.value = piece.y;
-        }
+        const targetPiece = piece;
+        const $targetInput = axis === 'x' ? $x : $y;
+        const nextValue = (targetPiece[axis] || 0) + dir * step;
 
-        updateComplexPreview();
-        calculate();
+        if (tryUpdatePieceValue(targetPiece, axis, nextValue, $targetInput)) {
+          $targetInput.value = targetPiece[axis];
+          updateComplexPreview();
+          calculate();
+        }
       });
     });
   }
@@ -1593,11 +1710,18 @@
   function removePieceFromComplex(pieceId) {
     const index = complexSpacePieces.findIndex(p => p.id === pieceId);
     if (index > -1) {
+      const simulatedPieces = complexSpacePieces.filter(p => p.id !== pieceId);
+      if (simulatedPieces.length > 1 && !arePiecesConnected(simulatedPieces)) {
+        showConnectivityWarning();
+        return;
+      }
+
       complexSpacePieces.splice(index, 1);
       const $pieceCard = document.getElementById(`piece-${pieceId}`);
       if ($pieceCard) $pieceCard.remove();
       updateComplexPreview();
       calculate();
+      hideConnectivityWarning();
     }
   }
 

@@ -617,3 +617,32 @@ button {
   border-color: #1e40af;
   box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
 }
+
+.complex-warning {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.complex-warning svg {
+  color: #f87171;
+  flex-shrink: 0;
+}
+
+.complex-warning strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.complex-warning span {
+  font-size: 12px;
+  color: #b91c1c;
+}
