@@ -472,9 +472,9 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
 function calculateHybrid(width, height, modeOrOptions, currentProduct, currentThickness) {
   const options = typeof modeOrOptions === 'string'
     ? {
-        roundRemainX: modeOrOptions === 'exact' ? ceilDiv : floorDiv,
-        roundRemainY: modeOrOptions === 'exact' ? ceilDiv : floorDiv
-      }
+      roundRemainX: modeOrOptions === 'exact' ? ceilDiv : floorDiv,
+      roundRemainY: modeOrOptions === 'exact' ? ceilDiv : floorDiv
+    }
     : (modeOrOptions || {});
 
   const roundRemainX = options.roundRemainX || floorDiv;
@@ -703,7 +703,7 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
 
   const isPuzzleAuto = type === 'hybrid';
   const isRollMat = type === 'roll' || type === 'petRoll';
-  
+
   let appliedMode = isPuzzleAuto ? 'auto' : (mode === 'auto' ? 'loose' : mode);
   if (isPuzzleAuto && mode === 'auto') {
     let needsExactMode = false;
@@ -711,13 +711,13 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
       const looseResult = calculateHybrid(piece.w, piece.h, 'loose', currentProduct, currentThickness);
       const widthShortage = Math.max(0, piece.w - (looseResult.coverageWidth || 0));
       const heightShortage = Math.max(0, piece.h - (looseResult.coverageHeight || 0));
-      
+
       if (widthShortage >= 25 || heightShortage >= 25) {
         needsExactMode = true;
         break;
       }
     }
-    
+
     if (needsExactMode) {
       appliedMode = 'exact';
     } else {
@@ -788,9 +788,9 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
   for (let row = 0; row < gridRows - 1; row++) {
     for (let col = 0; col < gridCols - 1; col++) {
       if (occupancyGrid[row][col] !== null && occupancyGrid[row][col + 1] !== null &&
-          occupancyGrid[row + 1][col] !== null && occupancyGrid[row + 1][col + 1] !== null &&
-          !used100Grid[row][col] && !used100Grid[row][col + 1] &&
-          !used100Grid[row + 1][col] && !used100Grid[row + 1][col + 1]) {
+        occupancyGrid[row + 1][col] !== null && occupancyGrid[row + 1][col + 1] !== null &&
+        !used100Grid[row][col] && !used100Grid[row][col + 1] &&
+        !used100Grid[row + 1][col] && !used100Grid[row + 1][col + 1]) {
 
         const tileX = col * gridSize;
         const tileY = row * gridSize;
@@ -880,6 +880,71 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
   return result;
 }
 
+function buildRollRectanglesFromPiecesY(pieces) {
+  const yEdges = new Set();
+  pieces.forEach(piece => {
+    yEdges.add(piece.y);
+    yEdges.add(piece.y + piece.h);
+  });
+
+  const sortedY = [...yEdges].sort((a, b) => a - b);
+  const rectangles = [];
+
+  for (let i = 0; i < sortedY.length - 1; i++) {
+    const startY = sortedY[i];
+    const endY = sortedY[i + 1];
+    if (endY <= startY) continue;
+
+    const coveringPieces = pieces.filter(piece => piece.y <= startY && piece.y + piece.h >= endY);
+    if (coveringPieces.length === 0) continue;
+    const primaryPieceIndex = coveringPieces[0].index !== undefined ? coveringPieces[0].index : 0;
+
+    const intervals = coveringPieces
+      .map(piece => [piece.x, piece.x + piece.w])
+      .sort((a, b) => a[0] - b[0]);
+
+    let current = null;
+    intervals.forEach(([startX, endX]) => {
+      if (current === null) {
+        current = [startX, endX];
+      } else if (startX <= current[1]) {
+        current[1] = Math.max(current[1], endX);
+      } else {
+        const width = current[1] - current[0];
+        if (width > 0) {
+          rectangles.push({
+            startX: current[0],
+            endX: current[1],
+            startY,
+            endY,
+            width,
+            height: endY - startY,
+            pieceIndex: primaryPieceIndex
+          });
+        }
+        current = [startX, endX];
+      }
+    });
+
+    if (current) {
+      const width = current[1] - current[0];
+      if (width > 0) {
+        rectangles.push({
+          startX: current[0],
+          endX: current[1],
+          startY,
+          endY,
+          width,
+          height: endY - startY,
+          pieceIndex: primaryPieceIndex
+        });
+      }
+    }
+  }
+
+  return rectangles;
+}
+
 // 복합 공간 롤매트 계산
 function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boundingHeight, offsetX, offsetY, currentThickness) {
   const isPet = type === 'petRoll';
@@ -890,163 +955,200 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
     y: piece.y + offsetY
   }));
 
-  const rectangles = buildRollRectanglesFromPieces(normalizedPieces);
-  if (rectangles.length === 0) {
-    return null;
-  }
+  // 두 가지 분할 전략 시도
+  // 1. X축 기준 분할 (세로 띠)
+  const rectanglesX = buildRollRectanglesFromPieces(normalizedPieces);
 
-  const actualArea = rectangles.reduce((sum, rect) => sum + (rect.width * rect.height), 0);
-  if (actualArea === 0) return null;
+  // 2. Y축 기준 분할 (가로 띠)
+  const rectanglesY = buildRollRectanglesFromPiecesY(normalizedPieces);
 
-  // 각 직사각형마다 최적의 방향을 자동 선택
-  const rollResults = [];
+  // 각 전략에 대해 계산 수행
+  function evaluateLayout(rectangles, strategyName) {
+    if (rectangles.length === 0) return null;
 
-  rectangles.forEach(rect => {
-    if (rect.width <= 0 || rect.height <= 0) return;
+    const actualArea = rectangles.reduce((sum, rect) => sum + (rect.width * rect.height), 0);
+    if (actualArea === 0) return null;
 
-    // 가로/세로 두 방향 모두 시도
-    const candidates = [];
+    const rollResults = [];
+    rectangles.forEach(rect => {
+      if (rect.width <= 0 || rect.height <= 0) return;
 
-    ['width', 'height'].forEach(axis => {
-      let rollResult = null;
-      if (mode === 'auto') {
-        const looseResult = calculateRollMat(rect.width, rect.height, 'loose', currentThickness, { isPet, forceAxis: axis });
-        if (looseResult) {
-          const usedWidth = looseResult.usedWidth || rect.width;
-          const actualRollLength = looseResult.rollLength || (looseResult.widthAxis === 'width'
-            ? looseResult.coverageHeight
-            : looseResult.coverageWidth);
-          const checkTargetLength = looseResult.widthAxis === 'width' ? rect.height : rect.width;
+      const candidates = [];
+      ['width', 'height'].forEach(axis => {
+        let rollResult = null;
+        if (mode === 'auto') {
+          const looseResult = calculateRollMat(rect.width, rect.height, 'loose', currentThickness, { isPet, forceAxis: axis });
+          if (looseResult) {
+            const usedWidth = looseResult.usedWidth || rect.width;
+            const actualRollLength = looseResult.rollLength || (looseResult.widthAxis === 'width'
+              ? looseResult.coverageHeight
+              : looseResult.coverageWidth);
+            const checkTargetLength = looseResult.widthAxis === 'width' ? rect.height : rect.width;
 
-          const widthShortage = Math.max(0, rect.width - usedWidth);
-          const lengthShortage = Math.max(0, checkTargetLength - actualRollLength);
+            const widthShortage = Math.max(0, rect.width - usedWidth);
+            const lengthShortage = Math.max(0, checkTargetLength - actualRollLength);
 
-          const needsWidthAdjust = widthShortage >= 20;
-          const needsLengthAdjust = lengthShortage >= 20;
+            const needsWidthAdjust = widthShortage >= 20;
+            const needsLengthAdjust = lengthShortage >= 20;
 
-          if (needsWidthAdjust || needsLengthAdjust) {
-            rollResult = calculateRollMat(rect.width, rect.height, 'exact', currentThickness, { isPet, forceAxis: axis });
-          } else {
-            rollResult = looseResult;
+            if (needsWidthAdjust || needsLengthAdjust) {
+              rollResult = calculateRollMat(rect.width, rect.height, 'exact', currentThickness, { isPet, forceAxis: axis });
+            } else {
+              rollResult = looseResult;
+            }
           }
+        } else {
+          rollResult = calculateRollMat(rect.width, rect.height, mode, currentThickness, { isPet, forceAxis: axis });
         }
-      } else {
-        rollResult = calculateRollMat(rect.width, rect.height, mode, currentThickness, { isPet, forceAxis: axis });
-      }
 
-      if (rollResult && rollResult.solutions) {
-        candidates.push({
-          axis,
-          rollResult,
-          price: rollResult.price || 0,
-          rollCount: rollResult.rollCount || 0,
-          wastePercent: rollResult.wastePercent || 0
+        if (rollResult && rollResult.solutions) {
+          candidates.push({
+            axis,
+            rollResult,
+            price: rollResult.price || 0,
+            rollCount: rollResult.rollCount || 0,
+            wastePercent: rollResult.wastePercent || 0
+          });
+        }
+      });
+
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => {
+          if (a.rollCount !== b.rollCount) return a.rollCount - b.rollCount;
+          if (Math.abs(a.price - b.price) > 0.0001) return a.price - b.price;
+          return a.wastePercent - b.wastePercent;
+        });
+
+        rollResults.push({
+          rect,
+          rollResult: candidates[0].rollResult
         });
       }
     });
 
-    // 최적의 방향 선택 (롤 개수 우선 - 임시)
-    if (candidates.length > 0) {
-      candidates.sort((a, b) => {
-        if (a.rollCount !== b.rollCount) return a.rollCount - b.rollCount;
-        if (Math.abs(a.price - b.price) > 0.0001) return a.price - b.price;
-        return a.wastePercent - b.wastePercent;
-      });
+    let totalPrice = 0;
+    let totalRollCount = 0;
+    let totalRollUnits = 0;
+    let usedArea = 0;
+    const breakdown = [];
+    const shippingMemoSet = new Set();
+    const visualStripes = [];
 
-      rollResults.push({
-        rect,
-        rollResult: candidates[0].rollResult
-      });
-    }
-  });
+    rollResults.forEach(({ rect, rollResult }) => {
+      totalPrice += rollResult.price || 0;
+      totalRollCount += rollResult.rollCount || 0;
+      totalRollUnits += rollResult.totalRollUnits || 0;
 
-  // 각 직사각형별로 집계
-  let totalPrice = 0;
-  let totalRollCount = 0;
-  let totalRollUnits = 0;
-  let usedArea = 0;
-  const breakdown = [];
-  const shippingMemoSet = new Set();
-  const visualStripes = [];
+      const rollLength = rollResult.rollLength || 0;
+      const splitCount = rollResult.splitCount || 1;
+      const usedWidth = rollResult.usedWidth || rect.width;
+      usedArea += usedWidth * rollLength * splitCount;
 
-  rollResults.forEach(({ rect, rollResult }) => {
-    totalPrice += rollResult.price || 0;
-    totalRollCount += rollResult.rollCount || 0;
-    totalRollUnits += rollResult.totalRollUnits || 0;
+      if (Array.isArray(rollResult.breakdown) && rollResult.breakdown.length > 0) {
+        rollResult.breakdown.forEach(line => breakdown.push(line));
+      }
 
-    const rollLength = rollResult.rollLength || 0;
-    const splitCount = rollResult.splitCount || 1;
-    const usedWidth = rollResult.usedWidth || rect.width;
-    usedArea += usedWidth * rollLength * splitCount;
+      const actualRollLength = rollResult.rollLength || (rollResult.widthAxis === 'width'
+        ? rollResult.coverageHeight
+        : rollResult.coverageWidth);
 
-    // breakdown 추가
-    if (Array.isArray(rollResult.breakdown) && rollResult.breakdown.length > 0) {
-      rollResult.breakdown.forEach(line => breakdown.push(line));
-    }
-
-    // 시각화 stripe 생성 - 각 직사각형의 위치에 맞춰서
-    const actualRollLength = rollResult.rollLength || (rollResult.widthAxis === 'width'
-      ? rollResult.coverageHeight
-      : rollResult.coverageWidth);
-
-    if (Array.isArray(rollResult.solutions)) {
-      if (rollResult.widthAxis === 'width') {
-        let offsetX = rect.startX;
-        rollResult.solutions.forEach(sol => {
-          for (let i = 0; i < sol.count; i++) {
-            for (let split = 0; split < splitCount; split++) {
-              visualStripes.push({
-                x: offsetX,
-                y: rect.startY + (split * actualRollLength),
-                width: sol.width,
-                height: actualRollLength,
-                label: `${sol.width}×${actualRollLength}cm`,
-                pieceIndex: rect.pieceIndex || 0
-              });
+      if (Array.isArray(rollResult.solutions)) {
+        if (rollResult.widthAxis === 'width') {
+          let offsetX = rect.startX;
+          rollResult.solutions.forEach(sol => {
+            for (let i = 0; i < sol.count; i++) {
+              for (let split = 0; split < splitCount; split++) {
+                visualStripes.push({
+                  x: offsetX,
+                  y: rect.startY + (split * actualRollLength),
+                  width: sol.width,
+                  height: actualRollLength,
+                  label: `${sol.width}×${actualRollLength}cm`,
+                  pieceIndex: rect.pieceIndex || 0
+                });
+              }
+              offsetX += sol.width;
             }
-            offsetX += sol.width;
-          }
-        });
+          });
+        } else {
+          let offsetY = rect.startY;
+          rollResult.solutions.forEach(sol => {
+            for (let i = 0; i < sol.count; i++) {
+              for (let split = 0; split < splitCount; split++) {
+                visualStripes.push({
+                  x: rect.startX + (split * actualRollLength),
+                  y: offsetY,
+                  width: actualRollLength,
+                  height: sol.width,
+                  label: `${actualRollLength}×${sol.width}cm`,
+                  pieceIndex: rect.pieceIndex || 0
+                });
+              }
+              offsetY += sol.width;
+            }
+          });
+        }
+      }
+
+      if (rollResult.shippingMemo) {
+        shippingMemoSet.add(rollResult.shippingMemo);
+      }
+    });
+
+    const wastePercent = usedArea > 0
+      ? Math.round(((usedArea - actualArea) / usedArea) * 100)
+      : 0;
+
+    return {
+      strategyName,
+      totalPrice,
+      totalRollCount,
+      totalRollUnits,
+      usedArea,
+      wastePercent,
+      breakdown,
+      shippingMemo: shippingMemoSet.size > 0 ? Array.from(shippingMemoSet).join(' / ') : '',
+      visualStripes,
+      rollResults,
+      actualArea
+    };
+  }
+
+  const resultX = evaluateLayout(rectanglesX, 'vertical_stripes');
+  const resultY = evaluateLayout(rectanglesY, 'horizontal_stripes');
+
+  let best = resultX;
+
+  if (resultX && resultY) {
+    // 비교 로직
+    // 1. 롤 개수 (적을수록 좋음)
+    if (resultY.totalRollCount < resultX.totalRollCount) {
+      best = resultY;
+    } else if (resultY.totalRollCount > resultX.totalRollCount) {
+      best = resultX;
+    } else {
+      // 2. 가격 (저렴할수록 좋음)
+      if (resultY.totalPrice < resultX.totalPrice - 10) { // 10원 차이 무시
+        best = resultY;
+      } else if (resultY.totalPrice > resultX.totalPrice + 10) {
+        best = resultX;
       } else {
-        let offsetY = rect.startY;
-        rollResult.solutions.forEach(sol => {
-          for (let i = 0; i < sol.count; i++) {
-            for (let split = 0; split < splitCount; split++) {
-              visualStripes.push({
-                x: rect.startX + (split * actualRollLength),
-                y: offsetY,
-                width: actualRollLength,
-                height: sol.width,
-                label: `${actualRollLength}×${sol.width}cm`,
-                pieceIndex: rect.pieceIndex || 0
-              });
-            }
-            offsetY += sol.width;
-          }
-        });
+        // 3. 낭비율 (적을수록 좋음)
+        if (resultY.wastePercent < resultX.wastePercent) {
+          best = resultY;
+        } else if (resultY.wastePercent > resultX.wastePercent) {
+          best = resultX;
+        } else {
+          // 4. 사용자 선호 (가로 방향 우선 = Horizontal Slicing)
+          best = resultY;
+        }
       }
     }
+  } else if (resultY) {
+    best = resultY;
+  }
 
-    // 배송 메모
-    if (rollResult.shippingMemo) {
-      shippingMemoSet.add(rollResult.shippingMemo);
-    }
-  });
-
-  const wastePercent = usedArea > 0
-    ? Math.round(((usedArea - actualArea) / usedArea) * 100)
-    : 0;
-
-  const best = {
-    totalPrice,
-    totalRollCount,
-    totalRollUnits,
-    usedArea,
-    wastePercent,
-    breakdown,
-    shippingMemo: shippingMemoSet.size > 0 ? Array.from(shippingMemoSet).join(' / ') : '',
-    visualStripes
-  };
+  if (!best) return null;
 
   const result = {
     name: name,
@@ -1060,7 +1162,7 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
     breakdown: best.breakdown.length > 0 ? best.breakdown : ['계산된 롤매트가 없습니다.'],
     rollCount: best.totalRollCount,
     totalRollUnits: best.totalRollUnits,
-    fitMessages: best.rollResult?.fitMessages || [],
+    fitMessages: [], // 복합공간은 개별 메시지 대신 통합 메시지 사용 가능 (현재는 비움)
     coverageWidth: boundingWidth,
     coverageHeight: boundingHeight,
     width: boundingWidth,
@@ -1083,7 +1185,7 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
       label: stripe.label,
       pieceIndex: stripe.pieceIndex !== undefined ? stripe.pieceIndex : 0
     })),
-    widthAxis: best.axis,
+    widthAxis: best.strategyName === 'horizontal_stripes' ? 'height' : 'width', // 시각화 힌트용
     gridMinor: 10,
     gridMajor: 50
   };
@@ -1096,12 +1198,12 @@ function calculateSpace(name, width, height, type, mode, space, currentProduct, 
   if (!space || !space.pieces || space.pieces.length === 0) {
     return calculateSimpleSpace(name, width, height, type, mode, currentProduct, currentThickness);
   }
-  
+
   if (space.pieces.length === 1) {
     const piece = space.pieces[0];
     return calculateSimpleSpace(name, piece.w, piece.h, type, mode, currentProduct, currentThickness);
   }
-  
+
   return calculateComplexSpace(name, space.pieces, type, mode, currentProduct, currentThickness);
 }
 

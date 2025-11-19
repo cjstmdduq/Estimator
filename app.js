@@ -562,7 +562,7 @@
         summary.lines.push(msg);
       });
     }
-    
+
     // breakdown이 없을 때도 기본 정보 추가
     if (summary.lines.length === 0) {
       if (result.type) {
@@ -818,7 +818,7 @@
         // 타일이 속한 조각의 색상 결정 (공간 조각과 동일한 색상 사용)
         // 타일의 실제 위치를 기반으로 어떤 조각에 속하는지 정확히 찾기
         let pieceIndex = 0;
-        
+
         if (pieces && pieces.length > 0) {
           // 타일의 영역이 어떤 조각에 속하는지 찾기
           // 타일의 중심점뿐만 아니라 타일이 실제로 조각의 영역 안에 있는지 확인
@@ -826,7 +826,7 @@
           const tileRight = tile.x + tile.width;
           const tileTop = tile.y;
           const tileBottom = tile.y + tile.height;
-          
+
           // 타일이 완전히 포함되거나 대부분 포함된 조각 찾기
           const containingPieces = pieces
             .map((piece, pieceIdx) => {
@@ -835,13 +835,13 @@
               const pieceRight = piece.x + piece.w;
               const pieceTop = piece.y;
               const pieceBottom = piece.y + piece.h;
-              
+
               // 타일이 조각의 영역 안에 있는지 확인 (겹치는 경우 포함)
               const overlapX = Math.max(0, Math.min(tileRight, pieceRight) - Math.max(tileLeft, pieceLeft));
               const overlapY = Math.max(0, Math.min(tileBottom, pieceBottom) - Math.max(tileTop, pieceTop));
               const overlapArea = overlapX * overlapY;
               const tileArea = tile.width * tile.height;
-              
+
               // 타일의 대부분(50% 이상)이 조각에 포함되면 해당 조각에 속함
               if (overlapArea > tileArea * 0.5) {
                 return { piece, pieceIndex, overlapArea };
@@ -849,7 +849,7 @@
               return null;
             })
             .filter(Boolean);
-          
+
           if (containingPieces.length > 0) {
             // 겹치는 경우 번호가 빠른(인덱스가 작은) 조각 우선
             containingPieces.sort((a, b) => {
@@ -867,7 +867,7 @@
           // pieces가 없으면 제공된 pieceIndex 사용
           pieceIndex = tile.pieceIndex;
         }
-        
+
         const tileColor = colors[pieceIndex % colors.length];
         const rgb = tileColor.match(/\w\w/g).map(x => parseInt(x, 16));
 
@@ -1333,52 +1333,13 @@
   let connectivityWarningTimer = null;
 
   const complexSpaceTemplates = [
-    // 기존 데이터 (유지)
     {
-      id: 'l-basic',
-      name: 'ㄱ자 기본형',
+      id: 'type-84t',
+      name: '84t (거실+주방+복도)',
       pieces: [
-        { name: '메인 존', x: 0, y: 0, w: 400, h: 250 },
-        { name: '확장 존', x: 400, y: 100, w: 200, h: 300 }
-      ]
-    },
-
-    // 신규 추가 데이터
-    {
-      id: 'type-84-4bay',
-      name: '84타입 4베이 (판상형)',
-      pieces: [
-        { name: '복도', x: 0, y: 150, w: 400, h: 120 },
-        { name: '거실', x: 400, y: 0, w: 450, h: 450 },
-        { name: '주방/식당', x: 400, y: 450, w: 450, h: 280 }
-      ]
-    },
-    {
-      id: 'type-59-3bay',
-      name: '59타입 3베이 (기본형)',
-      pieces: [
-        { name: '복도', x: 0, y: 120, w: 300, h: 110 },
-        { name: '거실', x: 300, y: 0, w: 360, h: 360 },
-        { name: '주방', x: 300, y: 360, w: 360, h: 240 }
-      ]
-    },
-    {
-      id: 'type-tower-l',
-      name: '타워형 (이면개방)',
-      pieces: [
-        { name: '진입 복도', x: 0, y: 0, w: 120, h: 500 },
-        { name: '연결 복도', x: 120, y: 380, w: 200, h: 120 },
-        { name: '거실', x: 320, y: 200, w: 400, h: 450 },
-        { name: '주방(안쪽)', x: 320, y: 0, w: 300, h: 200 }
-      ]
-    },
-    {
-      id: 'type-large-open',
-      name: '대형 평수 (광폭형)',
-      pieces: [
-        { name: '메인 복도', x: 0, y: 200, w: 600, h: 130 },
-        { name: '거실', x: 600, y: 0, w: 550, h: 550 },
-        { name: '다이닝룸', x: 600, y: 550, w: 400, h: 300 }
+        { name: '조각 1', x: 50, y: 0, w: 300, h: 200 },
+        { name: '조각 2', x: 0, y: 200, w: 750, h: 110 },
+        { name: '조각 3', x: 0, y: 310, w: 420, h: 300 }
       ]
     }
   ];
@@ -1449,16 +1410,12 @@
     }
 
     piece[key] = value;
+    // 맞물림 제한 제거: 연결되지 않아도 값 업데이트 허용
     if (!arePiecesConnected()) {
-      piece[key] = previousValue;
-      if ($input) {
-        $input.value = previousValue;
-      }
       showConnectivityWarning();
-      return false;
+    } else {
+      hideConnectivityWarning();
     }
-
-    hideConnectivityWarning();
     return true;
   }
 
@@ -1497,12 +1454,28 @@
     calculate();
   }
 
+  function renderTemplateButtons() {
+    if (!$complexTemplateButtons) return;
+    $complexTemplateButtons.innerHTML = '';
+
+    complexSpaceTemplates.forEach(template => {
+      const btn = document.createElement('button');
+      btn.className = 'template-btn';
+      btn.dataset.complexTemplate = template.id;
+      btn.textContent = template.name;
+      $complexTemplateButtons.appendChild(btn);
+    });
+  }
+
   if ($complexTemplateButtons) {
     $complexTemplateButtons.addEventListener('click', event => {
       const target = event.target.closest('[data-complex-template]');
       if (!target) return;
       applyComplexTemplate(target.dataset.complexTemplate);
     });
+
+    // 초기화 시 버튼 렌더링
+    renderTemplateButtons();
   }
 
   // 공간 모드 전환 핸들러
@@ -1636,7 +1609,29 @@
     });
 
     $w.addEventListener('input', () => {
-      const newWidth = Math.max(10, clampNonNegInt($w.value));
+      // 입력 중에는 최소값 강제하지 않음 (타이핑 방해 방지)
+      const val = parseInt($w.value);
+      let newWidth = isNaN(val) ? 0 : val;
+
+      // 최대값 제한 제거
+      /*
+      if (newWidth > 1500) {
+        newWidth = 1500;
+        $w.value = newWidth;
+      }
+      */
+
+      if (tryUpdatePieceValue(piece, 'w', newWidth, $w)) {
+        updateComplexPreview();
+        calculate();
+      }
+    });
+
+    $w.addEventListener('change', () => {
+      // 입력 완료 시 최소값 10 강제, 최대값 제한 제거
+      let newWidth = clampNonNegInt($w.value);
+      newWidth = Math.max(10, newWidth);
+
       $w.value = newWidth;
       if (tryUpdatePieceValue(piece, 'w', newWidth, $w)) {
         updateComplexPreview();
@@ -1645,7 +1640,29 @@
     });
 
     $h.addEventListener('input', () => {
-      const newHeight = Math.max(10, clampNonNegInt($h.value));
+      // 입력 중에는 최소값 강제하지 않음
+      const val = parseInt($h.value);
+      let newHeight = isNaN(val) ? 0 : val;
+
+      // 최대값 제한 제거
+      /*
+      if (newHeight > 1500) {
+        newHeight = 1500;
+        $h.value = newHeight;
+      }
+      */
+
+      if (tryUpdatePieceValue(piece, 'h', newHeight, $h)) {
+        updateComplexPreview();
+        calculate();
+      }
+    });
+
+    $h.addEventListener('change', () => {
+      // 입력 완료 시 최소값 10 강제, 최대값 제한 제거
+      let newHeight = clampNonNegInt($h.value);
+      newHeight = Math.max(10, newHeight);
+
       $h.value = newHeight;
       if (tryUpdatePieceValue(piece, 'h', newHeight, $h)) {
         updateComplexPreview();
@@ -1660,7 +1677,17 @@
     $x.addEventListener('input', () => {
       const parsed = parseInt($x.value, 10);
       const newX = isNaN(parsed) ? 0 : parsed;
-      $x.value = newX;
+      // 입력 중에는 값 강제 업데이트 하지 않음
+      if (tryUpdatePieceValue(piece, 'x', newX, $x)) {
+        updateComplexPreview();
+        calculate();
+      }
+    });
+
+    $x.addEventListener('change', () => {
+      const parsed = parseInt($x.value, 10);
+      const newX = isNaN(parsed) ? 0 : parsed;
+      $x.value = newX; // 포맷팅
       if (tryUpdatePieceValue(piece, 'x', newX, $x)) {
         updateComplexPreview();
         calculate();
@@ -1670,7 +1697,17 @@
     $y.addEventListener('input', () => {
       const parsed = parseInt($y.value, 10);
       const newY = isNaN(parsed) ? 0 : parsed;
-      $y.value = newY;
+      // 입력 중에는 값 강제 업데이트 하지 않음
+      if (tryUpdatePieceValue(piece, 'y', newY, $y)) {
+        updateComplexPreview();
+        calculate();
+      }
+    });
+
+    $y.addEventListener('change', () => {
+      const parsed = parseInt($y.value, 10);
+      const newY = isNaN(parsed) ? 0 : parsed;
+      $y.value = newY; // 포맷팅
       if (tryUpdatePieceValue(piece, 'y', newY, $y)) {
         updateComplexPreview();
         calculate();
@@ -1775,9 +1812,30 @@
     // 입력 변경 시 자동 계산
     const inputs = spaceDiv.querySelectorAll('input, select');
     inputs.forEach(input => {
-      ['input', 'change'].forEach(evt => {
-        input.addEventListener(evt, calculate);
-      });
+      if (input.classList.contains('space-w') || input.classList.contains('space-h')) {
+        input.addEventListener('input', () => {
+          let val = parseInt(input.value);
+          // 최대값 제한 제거
+          /*
+          if (!isNaN(val) && val > 1500) {
+            input.value = 1500;
+          }
+          */
+          calculate();
+        });
+
+        input.addEventListener('change', () => {
+          let val = parseInt(input.value);
+          if (isNaN(val)) val = 0;
+          val = Math.max(0, val); // 최대값 제한 제거
+          input.value = val;
+          calculate();
+        });
+      } else {
+        ['input', 'change'].forEach(evt => {
+          input.addEventListener(evt, calculate);
+        });
+      }
     });
 
     // spaces 배열에 추가
