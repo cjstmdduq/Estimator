@@ -480,11 +480,11 @@ button {
   height: 8px;
 }
 
-/* 다운로드 버튼 */
+/* 시각화 버튼들 */
+.toggle-mat-btn,
 .download-canvas-btn {
   position: absolute;
   top: 12px;
-  right: 12px;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -499,6 +499,15 @@ button {
   backdrop-filter: blur(4px);
 }
 
+.toggle-mat-btn {
+  right: 60px;
+}
+
+.download-canvas-btn {
+  right: 12px;
+}
+
+.toggle-mat-btn:hover,
 .download-canvas-btn:hover {
   background: #eef2ff;
   transform: scale(1.05);

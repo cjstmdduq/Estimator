@@ -36,7 +36,7 @@
       name: '유아 롤매트',
       image: './images/roll-mat-placeholder.svg',
       imageReal: './images/product_01.jpg',
-      description: '두께 선택: 12T / 14T / 17T / 22T',
+      description: '두께 선택: 12T / 17T / 22T',
       link: 'https://brand.naver.com/ddasaroom/products/6092903705'
     },
     petRoll: {
@@ -66,11 +66,14 @@
     } else if (currentProduct === 'babyRoll') {
       thicknesses = [
         { value: '12', label: '12T' },
-        { value: '14', label: '14T' },
         { value: '17', label: '17T' },
         { value: '22', label: '22T' }
       ];
-      currentThickness = ['12', '14', '17', '22'].includes(currentThickness) ? currentThickness : '12';
+      // 14T는 단종 예정이므로 선택 불가, 현재 선택된 경우 기본값으로 변경
+      if (currentThickness === '14') {
+        currentThickness = '12';
+      }
+      currentThickness = ['12', '17', '22'].includes(currentThickness) ? currentThickness : '12';
     } else if (currentProduct === 'petRoll') {
       thicknesses = [
         { value: '6', label: '6T' },
@@ -183,7 +186,7 @@
     let totalRollUnits = 0;
     const shippingMemos = [];
 
-    // 복잡한 공간 모드인 경우
+    // 복합공간 모드인 경우
     if (currentSpaceMode === 'complex') {
       if (complexSpacePieces.length > 0) {
         // 현재 제품에 따른 타입 결정
@@ -194,15 +197,30 @@
           productType = 'petRoll';
         }
 
-        // 복잡한 공간 계산 (calculations.js의 전역 함수 사용)
-        const result = window.calculateComplexSpace(
-          '복잡한 공간',
-          complexSpacePieces.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, name: p.name, index: p.index })),
-          productType,
-          calcMode,
-          currentProduct,
-          currentThickness
-        );
+        let result;
+        // 조각이 1개일 때는 단순공간 계산 사용 (동일한 결과 보장)
+        if (complexSpacePieces.length === 1) {
+          const piece = complexSpacePieces[0];
+          result = window.calculateSimpleSpace(
+            '복합공간',
+            piece.w,
+            piece.h,
+            productType,
+            calcMode,
+            currentProduct,
+            currentThickness
+          );
+        } else {
+          // 복합공간 계산 (calculations.js의 전역 함수 사용)
+          result = window.calculateComplexSpace(
+            '복합공간',
+            complexSpacePieces.map(p => ({ x: p.x, y: p.y, w: p.w, h: p.h, name: p.name, index: p.index })),
+            productType,
+            calcMode,
+            currentProduct,
+            currentThickness
+          );
+        }
 
         if (result) {
           spaceResults.push({ index: 0, ...result });
@@ -227,7 +245,7 @@
         }
       }
     } else {
-      // 단순 공간 모드 (기존 로직)
+      // 단순공간 모드 (기존 로직)
       spaces.forEach((space) => {
         const result = window.calculateSpace(
           space.getName(),
@@ -298,9 +316,9 @@
       spaceResults.forEach((r, idx) => {
         const spaceName = r.name || `공간 ${idx + 1}`;
 
-        // 복합 공간인 경우 조각별로 그룹화하여 표시
+        // 복합공간인 경우 조각별로 그룹화하여 표시
         if (r.pieceDetails && r.pieceDetails.length > 0 && r.breakdown) {
-          // 복합 공간은 크기 표시 안함
+          // 복합공간은 크기 표시 안함
           totalCompositionHTML += `<div style="margin-bottom: 12px;">
             <strong>${spaceName}</strong>
           </div>`;
@@ -347,7 +365,7 @@
             totalCompositionHTML += `<div style="margin-bottom: 8px;"></div>`;
           });
         } else {
-          // 단순 공간인 경우 기존 방식 (크기 표시)
+          // 단순공간인 경우 기존 방식 (크기 표시)
           totalCompositionHTML += `<div style="margin-bottom: 12px;">
             <strong>${spaceName}</strong>
             <span class="muted small">(${r.width}cm × ${r.height}cm)</span>
@@ -642,7 +660,7 @@
     return text;
   }
 
-  // 복합 공간 시각화 렌더링
+  // 복합공간 시각화 렌더링
   function renderComplexSpaceVisualization(container, vis, result, spaceIdx) {
     const { pieces, space, coverage, tiles } = vis;
     const baseWidth = Math.max(space.width, 1);
@@ -791,13 +809,65 @@
 
       tiles.forEach((tile, idx) => {
         const tileRect = document.createElementNS(SVG_NS, 'rect');
+        tileRect.setAttribute('class', 'tile');
         tileRect.setAttribute('x', tile.x);
         tileRect.setAttribute('y', tile.y);
         tileRect.setAttribute('width', tile.width);
         tileRect.setAttribute('height', tile.height);
 
-        // 타일이 속한 조각의 색상 결정 (조각 인덱스 우선 사용)
-        const pieceIndex = tile.pieceIndex !== undefined ? tile.pieceIndex : 0;
+        // 타일이 속한 조각의 색상 결정 (공간 조각과 동일한 색상 사용)
+        // 타일의 실제 위치를 기반으로 어떤 조각에 속하는지 정확히 찾기
+        let pieceIndex = 0;
+        
+        if (pieces && pieces.length > 0) {
+          // 타일의 영역이 어떤 조각에 속하는지 찾기
+          // 타일의 중심점뿐만 아니라 타일이 실제로 조각의 영역 안에 있는지 확인
+          const tileLeft = tile.x;
+          const tileRight = tile.x + tile.width;
+          const tileTop = tile.y;
+          const tileBottom = tile.y + tile.height;
+          
+          // 타일이 완전히 포함되거나 대부분 포함된 조각 찾기
+          const containingPieces = pieces
+            .map((piece, pieceIdx) => {
+              const pieceIndex = piece.index !== undefined ? piece.index : pieceIdx;
+              const pieceLeft = piece.x;
+              const pieceRight = piece.x + piece.w;
+              const pieceTop = piece.y;
+              const pieceBottom = piece.y + piece.h;
+              
+              // 타일이 조각의 영역 안에 있는지 확인 (겹치는 경우 포함)
+              const overlapX = Math.max(0, Math.min(tileRight, pieceRight) - Math.max(tileLeft, pieceLeft));
+              const overlapY = Math.max(0, Math.min(tileBottom, pieceBottom) - Math.max(tileTop, pieceTop));
+              const overlapArea = overlapX * overlapY;
+              const tileArea = tile.width * tile.height;
+              
+              // 타일의 대부분(50% 이상)이 조각에 포함되면 해당 조각에 속함
+              if (overlapArea > tileArea * 0.5) {
+                return { piece, pieceIndex, overlapArea };
+              }
+              return null;
+            })
+            .filter(Boolean);
+          
+          if (containingPieces.length > 0) {
+            // 겹치는 경우 번호가 빠른(인덱스가 작은) 조각 우선
+            containingPieces.sort((a, b) => {
+              if (a.pieceIndex !== b.pieceIndex) {
+                return a.pieceIndex - b.pieceIndex; // 번호가 빠른 것 우선
+              }
+              return b.overlapArea - a.overlapArea; // 같은 번호면 겹침 영역이 큰 것 우선
+            });
+            pieceIndex = containingPieces[0].pieceIndex;
+          } else if (tile.pieceIndex !== undefined) {
+            // 포함된 조각이 없으면 제공된 pieceIndex 사용
+            pieceIndex = tile.pieceIndex;
+          }
+        } else if (tile.pieceIndex !== undefined) {
+          // pieces가 없으면 제공된 pieceIndex 사용
+          pieceIndex = tile.pieceIndex;
+        }
+        
         const tileColor = colors[pieceIndex % colors.length];
         const rgb = tileColor.match(/\w\w/g).map(x => parseInt(x, 16));
 
@@ -824,6 +894,7 @@
         // 타일 레이블
         if (tile.width >= 30 && tile.height >= 30) {
           const label = document.createElementNS(SVG_NS, 'text');
+          label.setAttribute('class', 'tile');
           label.setAttribute('x', tile.x + tile.width / 2);
           label.setAttribute('y', tile.y + tile.height / 2);
           label.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
@@ -867,6 +938,46 @@
     container.appendChild(svg);
 
     const summary = buildSpaceQuickSummary(result, spaceIdx || 0);
+
+    // 매트 표시/숨기기 토글 버튼
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'toggle-mat-btn';
+    toggleBtn.title = '매트 표시/숨기기';
+    toggleBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    `;
+
+    // 컨테이너에 토글 상태 저장
+    if (!('matsVisible' in container.dataset)) {
+      container.dataset.matsVisible = 'true';
+    }
+    const matsVisible = container.dataset.matsVisible === 'true';
+
+    // 초기 상태 적용
+    const matElements = svg.querySelectorAll('.tile, .stripe');
+    matElements.forEach(tile => {
+      tile.style.opacity = matsVisible ? '' : '0';
+    });
+    toggleBtn.style.opacity = matsVisible ? '' : '0.5';
+    toggleBtn.title = matsVisible ? '매트 표시/숨기기' : '매트 숨김 (클릭하여 표시)';
+
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const currentState = container.dataset.matsVisible === 'true';
+      const newState = !currentState;
+      container.dataset.matsVisible = newState;
+
+      const matElements = svg.querySelectorAll('.tile, .stripe');
+      matElements.forEach(tile => {
+        tile.style.opacity = newState ? '' : '0';
+      });
+      toggleBtn.style.opacity = newState ? '' : '0.5';
+      toggleBtn.title = newState ? '매트 표시/숨기기' : '매트 숨김 (클릭하여 표시)';
+    });
+    container.appendChild(toggleBtn);
 
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'download-canvas-btn';
@@ -989,6 +1100,7 @@
       if (vis.type === 'puzzle' && Array.isArray(vis.tiles)) {
         vis.tiles.forEach((tile, tileIdx) => {
           const tileRect = document.createElementNS(SVG_NS, 'rect');
+          tileRect.setAttribute('class', 'tile');
           tileRect.setAttribute('x', tile.x);
           tileRect.setAttribute('y', tile.y);
           tileRect.setAttribute('width', tile.width);
@@ -1005,6 +1117,7 @@
           svg.appendChild(tileRect);
           if (tile.width >= 30 && tile.height >= 30) {
             const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('class', 'tile');
             label.setAttribute('x', tile.x + tile.width / 2);
             label.setAttribute('y', tile.y + tile.height / 2);
             label.setAttribute('font-size', Math.min(tile.width, tile.height) * 0.1);
@@ -1020,6 +1133,7 @@
         const colors = ['rgba(59, 130, 246, 0.55)', 'rgba(37, 99, 235, 0.55)', 'rgba(96, 165, 250, 0.55)'];
         vis.stripes.forEach((strip, stripIdx) => {
           const stripRect = document.createElementNS(SVG_NS, 'rect');
+          stripRect.setAttribute('class', 'stripe');
           stripRect.setAttribute('x', strip.x);
           stripRect.setAttribute('y', strip.y);
           stripRect.setAttribute('width', strip.width);
@@ -1031,6 +1145,7 @@
           const minDimension = Math.min(strip.width, strip.height);
           if (minDimension >= 20) {
             const label = document.createElementNS(SVG_NS, 'text');
+            label.setAttribute('class', 'stripe');
             label.setAttribute('x', strip.x + strip.width / 2);
             label.setAttribute('y', strip.y + strip.height / 2);
             label.setAttribute('font-size', minDimension * 0.1);
@@ -1072,6 +1187,45 @@
       container.appendChild(svg);
 
       const summary = buildSpaceQuickSummary(result, idx);
+
+      // 매트 표시/숨기기 토글 버튼 (persistent state)
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'toggle-mat-btn';
+      toggleBtn.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+      `;
+
+      // 컨테이너에 상태 저장 (초기값 설정)
+      if (!('matsVisible' in container.dataset)) {
+        container.dataset.matsVisible = 'true';
+      }
+      const matsVisible = container.dataset.matsVisible === 'true';
+
+      // 초기 상태 적용
+      const matElements = svg.querySelectorAll('.tile, .stripe');
+      matElements.forEach(tile => {
+        tile.style.opacity = matsVisible ? '' : '0';
+      });
+      toggleBtn.style.opacity = matsVisible ? '' : '0.5';
+      toggleBtn.title = matsVisible ? '매트 표시/숨기기' : '매트 숨김 (클릭하여 표시)';
+
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentState = container.dataset.matsVisible === 'true';
+        const newState = !currentState;
+        container.dataset.matsVisible = newState;
+
+        const matElements = svg.querySelectorAll('.tile, .stripe');
+        matElements.forEach(tile => {
+          tile.style.opacity = newState ? '' : '0';
+        });
+        toggleBtn.style.opacity = newState ? '' : '0.5';
+        toggleBtn.title = newState ? '매트 표시/숨기기' : '매트 숨김 (클릭하여 표시)';
+      });
+      container.appendChild(toggleBtn);
 
       const downloadBtn = document.createElement('button');
       downloadBtn.className = 'download-canvas-btn';
@@ -1160,7 +1314,7 @@
     // 계산 방식 섹션이 제거되어 더 이상 필요 없음
   }
 
-  // ========== 복잡한 공간 관리 ==========
+  // ========== 복합공간 관리 ==========
   const $spaceModeSimple = document.getElementById('space-mode-simple');
   const $spaceModeComplex = document.getElementById('space-mode-complex');
   const $simpleSpaceSection = document.getElementById('simple-space-section');
@@ -1170,7 +1324,7 @@
   // const $complexPreviewCanvas = document.getElementById('complex-preview-canvas'); // 미리보기 제거됨
 
   let currentSpaceMode = 'simple'; // 'simple' | 'complex'
-  let complexSpacePieces = []; // 복잡한 공간의 조각들
+  let complexSpacePieces = []; // 복합공간의 조각들
   let pieceIdCounter = 0;
 
   // 공간 모드 전환 핸들러
@@ -1184,7 +1338,7 @@
       $simpleSpaceSection.style.display = 'none';
       $complexSpaceSection.style.display = 'block';
 
-      // 복잡한 공간 모드로 전환 시 초기화
+      // 복합공간 모드로 전환 시 초기화
       if (complexSpacePieces.length === 0) {
         addPieceToComplex(); // 첫 번째 조각 자동 추가
       }
@@ -1206,7 +1360,7 @@
     }
   });
 
-  // 조각 추가 (복잡한 공간)
+  // 조각 추가 (복합공간)
   function addPieceToComplex() {
     const pieceId = pieceIdCounter++;
     const pieceIndex = complexSpacePieces.length;
@@ -1361,7 +1515,7 @@
     }
   }
 
-  // 복잡한 공간 미리보기 업데이트 (SVG 시각화)
+  // 복합공간 미리보기 업데이트 (SVG 시각화)
   function updateComplexPreview() {
     // 미리보기 캔버스 제거됨 - 아무 작업 안함
   }
@@ -1369,7 +1523,7 @@
   // 조각 추가 버튼 이벤트 리스너
   $addPiece.addEventListener('click', addPieceToComplex);
 
-  // ========== 단순 공간 관리 ==========
+  // ========== 단순공간 관리 ==========
   // 공간 추가 함수 (단순 버전 - 조각 추가 기능 제거됨)
   function addSpace() {
     spaceCounter++;

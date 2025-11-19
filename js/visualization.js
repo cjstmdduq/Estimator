@@ -107,7 +107,7 @@ function createPuzzleVisualization(spaceWidth, spaceHeight, coverageWidth, cover
   };
 }
 
-// 복합 공간 시각화 (L자, T자 등)
+// 복합공간 시각화 (L자, T자 등)
 function createComplexVisualization(pieces, type, mode, tileMap) {
   if (!pieces || pieces.length === 0) return null;
 

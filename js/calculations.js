@@ -757,8 +757,15 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
         const overlapY = Math.min(basePieceY + piece.h, cellEndY) - Math.max(basePieceY, cellY);
 
         if (overlapX > 0 && overlapY > 0) {
+          const currentPieceIndex = piece.index !== undefined ? piece.index : pieceIdx;
           if (occupancyGrid[row][col] === null) {
-            occupancyGrid[row][col] = piece.index !== undefined ? piece.index : pieceIdx;
+            occupancyGrid[row][col] = currentPieceIndex;
+          } else {
+            // 겹치는 경우 번호가 빠른(인덱스가 작은) 조각 우선
+            const existingIndex = occupancyGrid[row][col];
+            if (currentPieceIndex < existingIndex) {
+              occupancyGrid[row][col] = currentPieceIndex;
+            }
           }
         }
       }
@@ -881,19 +888,16 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
   const actualArea = rectangles.reduce((sum, rect) => sum + (rect.width * rect.height), 0);
   if (actualArea === 0) return null;
 
-  const evaluateAxis = (axis) => {
-    let totalPrice = 0;
-    let totalRollCount = 0;
-    let totalRollUnits = 0;
-    let usedArea = 0;
-    const allSolutions = [];
-    const breakdown = [];
-    const shippingMemoSet = new Set();
-    const visualStripes = [];
+  // 각 직사각형마다 최적의 방향을 자동 선택
+  const rollResults = [];
 
-    rectangles.forEach(rect => {
-      if (rect.width <= 0 || rect.height <= 0) return;
-      
+  rectangles.forEach(rect => {
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    // 가로/세로 두 방향 모두 시도
+    const candidates = [];
+
+    ['width', 'height'].forEach(axis => {
       let rollResult = null;
       if (mode === 'auto') {
         const looseResult = calculateRollMat(rect.width, rect.height, 'loose', currentThickness, { isPet, forceAxis: axis });
@@ -902,14 +906,14 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
           const actualRollLength = looseResult.rollLength || (looseResult.widthAxis === 'width'
             ? looseResult.coverageHeight
             : looseResult.coverageWidth);
-          const targetLength = looseResult.widthAxis === 'width' ? rect.height : rect.width;
-          
+          const checkTargetLength = looseResult.widthAxis === 'width' ? rect.height : rect.width;
+
           const widthShortage = Math.max(0, rect.width - usedWidth);
-          const lengthShortage = Math.max(0, targetLength - actualRollLength);
-          
+          const lengthShortage = Math.max(0, checkTargetLength - actualRollLength);
+
           const needsWidthAdjust = widthShortage >= 20;
           const needsLengthAdjust = lengthShortage >= 20;
-          
+
           if (needsWidthAdjust || needsLengthAdjust) {
             rollResult = calculateRollMat(rect.width, rect.height, 'exact', currentThickness, { isPet, forceAxis: axis });
           } else {
@@ -919,103 +923,120 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
       } else {
         rollResult = calculateRollMat(rect.width, rect.height, mode, currentThickness, { isPet, forceAxis: axis });
       }
-      
-      if (!rollResult) return;
 
-      totalPrice += rollResult.price || 0;
-      totalRollCount += rollResult.rollCount || 0;
-      totalRollUnits += rollResult.totalRollUnits || 0;
-
-      if (rollResult.solutions) {
-        allSolutions.push(...rollResult.solutions);
-      }
-
-      if (Array.isArray(rollResult.breakdown) && rollResult.breakdown.length > 0) {
-        rollResult.breakdown.forEach(line => breakdown.push(line));
-      }
-
-      const rollLength = rollResult.rollLength || 0;
-      const splitCount = rollResult.splitCount || 1;
-      const usedWidth = rollResult.usedWidth || rect.width;
-      usedArea += usedWidth * rollLength * splitCount;
-
-      const actualRollLength = rollResult.rollLength || (rollResult.widthAxis === 'width'
-        ? rollResult.coverageHeight
-        : rollResult.coverageWidth);
-
-      if (Array.isArray(rollResult.solutions)) {
-        if (rollResult.widthAxis === 'width') {
-          let offsetXLocal = rect.startX;
-          rollResult.solutions.forEach(sol => {
-            for (let i = 0; i < sol.count; i++) {
-              for (let split = 0; split < splitCount; split++) {
-                visualStripes.push({
-                  x: offsetXLocal,
-                  y: rect.startY + (split * actualRollLength),
-                  width: sol.width,
-                  height: actualRollLength,
-                  label: `${sol.width}×${actualRollLength}cm`,
-                  pieceIndex: rect.pieceIndex || 0
-                });
-              }
-              offsetXLocal += sol.width;
-            }
-          });
-        } else {
-          let offsetYLocal = rect.startY;
-          rollResult.solutions.forEach(sol => {
-            for (let i = 0; i < sol.count; i++) {
-              for (let split = 0; split < splitCount; split++) {
-                visualStripes.push({
-                  x: rect.startX + (split * actualRollLength),
-                  y: offsetYLocal,
-                  width: actualRollLength,
-                  height: sol.width,
-                  label: `${actualRollLength}×${sol.width}cm`,
-                  pieceIndex: rect.pieceIndex || 0
-                });
-              }
-              offsetYLocal += sol.width;
-            }
-          });
-        }
-      }
-
-      if (rollResult.shippingMemo) {
-        shippingMemoSet.add(rollResult.shippingMemo);
+      if (rollResult && rollResult.solutions) {
+        candidates.push({
+          axis,
+          rollResult,
+          price: rollResult.price || 0,
+          rollCount: rollResult.rollCount || 0,
+          wastePercent: rollResult.wastePercent || 0
+        });
       }
     });
 
-    const wastePercent = usedArea > 0
-      ? Math.round(((usedArea - actualArea) / usedArea) * 100)
-      : 0;
+    // 최적의 방향 선택 (가격 우선)
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        if (Math.abs(a.price - b.price) > 0.0001) return a.price - b.price;
+        if (a.rollCount !== b.rollCount) return a.rollCount - b.rollCount;
+        return a.wastePercent - b.wastePercent;
+      });
 
-    return {
-      totalPrice,
-      totalRollCount,
-      totalRollUnits,
-      usedArea,
-      wastePercent,
-      allSolutions,
-      breakdown,
-      shippingMemo: shippingMemoSet.size > 0 ? Array.from(shippingMemoSet).join(' / ') : '',
-      axis,
-      visualStripes
-    };
-  };
-
-  const candidateWidth = evaluateAxis('width');
-  const candidateHeight = evaluateAxis('height');
-  const candidates = [candidateWidth, candidateHeight].filter(c => c.totalPrice > 0 || c.totalRollCount > 0);
-  if (candidates.length === 0) return null;
-
-  candidates.sort((a, b) => {
-    if (Math.abs(a.totalPrice - b.totalPrice) > 0.0001) return a.totalPrice - b.totalPrice;
-    if (a.totalRollCount !== b.totalRollCount) return a.totalRollCount - b.totalRollCount;
-    return a.wastePercent - b.wastePercent;
+      rollResults.push({
+        rect,
+        rollResult: candidates[0].rollResult
+      });
+    }
   });
 
-  const best = candidates[0];
+  // 각 직사각형별로 집계
+  let totalPrice = 0;
+  let totalRollCount = 0;
+  let totalRollUnits = 0;
+  let usedArea = 0;
+  const breakdown = [];
+  const shippingMemoSet = new Set();
+  const visualStripes = [];
+
+  rollResults.forEach(({ rect, rollResult }) => {
+    totalPrice += rollResult.price || 0;
+    totalRollCount += rollResult.rollCount || 0;
+    totalRollUnits += rollResult.totalRollUnits || 0;
+
+    const rollLength = rollResult.rollLength || 0;
+    const splitCount = rollResult.splitCount || 1;
+    const usedWidth = rollResult.usedWidth || rect.width;
+    usedArea += usedWidth * rollLength * splitCount;
+
+    // breakdown 추가
+    if (Array.isArray(rollResult.breakdown) && rollResult.breakdown.length > 0) {
+      rollResult.breakdown.forEach(line => breakdown.push(line));
+    }
+
+    // 시각화 stripe 생성 - 각 직사각형의 위치에 맞춰서
+    const actualRollLength = rollResult.rollLength || (rollResult.widthAxis === 'width'
+      ? rollResult.coverageHeight
+      : rollResult.coverageWidth);
+
+    if (Array.isArray(rollResult.solutions)) {
+      if (rollResult.widthAxis === 'width') {
+        let offsetX = rect.startX;
+        rollResult.solutions.forEach(sol => {
+          for (let i = 0; i < sol.count; i++) {
+            for (let split = 0; split < splitCount; split++) {
+              visualStripes.push({
+                x: offsetX,
+                y: rect.startY + (split * actualRollLength),
+                width: sol.width,
+                height: actualRollLength,
+                label: `${sol.width}×${actualRollLength}cm`,
+                pieceIndex: rect.pieceIndex || 0
+              });
+            }
+            offsetX += sol.width;
+          }
+        });
+      } else {
+        let offsetY = rect.startY;
+        rollResult.solutions.forEach(sol => {
+          for (let i = 0; i < sol.count; i++) {
+            for (let split = 0; split < splitCount; split++) {
+              visualStripes.push({
+                x: rect.startX + (split * actualRollLength),
+                y: offsetY,
+                width: actualRollLength,
+                height: sol.width,
+                label: `${actualRollLength}×${sol.width}cm`,
+                pieceIndex: rect.pieceIndex || 0
+              });
+            }
+            offsetY += sol.width;
+          }
+        });
+      }
+    }
+
+    // 배송 메모
+    if (rollResult.shippingMemo) {
+      shippingMemoSet.add(rollResult.shippingMemo);
+    }
+  });
+
+  const wastePercent = usedArea > 0
+    ? Math.round(((usedArea - actualArea) / usedArea) * 100)
+    : 0;
+
+  const best = {
+    totalPrice,
+    totalRollCount,
+    totalRollUnits,
+    usedArea,
+    wastePercent,
+    breakdown,
+    shippingMemo: shippingMemoSet.size > 0 ? Array.from(shippingMemoSet).join(' / ') : '',
+    visualStripes
+  };
 
   const result = {
     name: name,
@@ -1034,7 +1055,6 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
     coverageHeight: boundingHeight,
     width: boundingWidth,
     height: boundingHeight,
-    solutions: best.allSolutions,
     wastePercent: best.wastePercent,
     shippingMemo: best.shippingMemo
   };
