@@ -956,11 +956,11 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
   }));
 
   // 두 가지 분할 전략 시도
-  // 1. X축 기준 분할 (세로 띠)
-  const rectanglesX = buildRollRectanglesFromPieces(normalizedPieces);
-
-  // 2. Y축 기준 분할 (가로 띠)
+  // 1. Y축 기준 분할 (가로 띠) - 사용자 요청으로 우선 실행
   const rectanglesY = buildRollRectanglesFromPiecesY(normalizedPieces);
+
+  // 2. X축 기준 분할 (세로 띠)
+  const rectanglesX = buildRollRectanglesFromPieces(normalizedPieces);
 
   // 각 전략에 대해 계산 수행
   function evaluateLayout(rectangles, strategyName) {
@@ -1114,38 +1114,33 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
     };
   }
 
-  const resultX = evaluateLayout(rectanglesX, 'vertical_stripes');
   const resultY = evaluateLayout(rectanglesY, 'horizontal_stripes');
+  const resultX = evaluateLayout(rectanglesX, 'vertical_stripes');
 
-  let best = resultX;
+  let best = resultY;
 
   if (resultX && resultY) {
     // 비교 로직
     // 1. 롤 개수 (적을수록 좋음)
-    if (resultY.totalRollCount < resultX.totalRollCount) {
-      best = resultY;
-    } else if (resultY.totalRollCount > resultX.totalRollCount) {
+    if (resultX.totalRollCount < resultY.totalRollCount) {
       best = resultX;
+    } else if (resultX.totalRollCount > resultY.totalRollCount) {
+      best = resultY;
     } else {
       // 2. 가격 (저렴할수록 좋음)
-      if (resultY.totalPrice < resultX.totalPrice - 10) { // 10원 차이 무시
-        best = resultY;
-      } else if (resultY.totalPrice > resultX.totalPrice + 10) {
+      if (resultX.totalPrice < resultY.totalPrice - 10) { // 10원 차이 무시
         best = resultX;
+      } else if (resultX.totalPrice > resultY.totalPrice + 10) {
+        best = resultY;
       } else {
-        // 3. 낭비율 (적을수록 좋음)
-        if (resultY.wastePercent < resultX.wastePercent) {
-          best = resultY;
-        } else if (resultY.wastePercent > resultX.wastePercent) {
-          best = resultX;
-        } else {
-          // 4. 사용자 선호 (가로 방향 우선 = Horizontal Slicing)
-          best = resultY;
-        }
+        // 3. 낭비율 비교 제거 및 가로 방향 우선 적용
+        // 사용자 요청: "대부분의 상황이 가로로 계산이된다" -> 가로 우선순위 상향
+        // 가격이 비슷하면 낭비율 차이가 있더라도 가로 방향(Horizontal Slicing)을 선택
+        best = resultY;
       }
     }
-  } else if (resultY) {
-    best = resultY;
+  } else if (resultX) {
+    best = resultX;
   }
 
   if (!best) return null;
