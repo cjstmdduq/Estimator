@@ -21,6 +21,8 @@
         <div class="layout-left">
           <section class="card">
             <h2>제품 선택</h2>
+
+            <!-- 따사룸 제품 -->
             <div class="product-tabs">
               <div class="product-tab-item">
                 <button class="product-tab-btn active" data-product="babyRoll">
@@ -39,6 +41,21 @@
                   <div class="product-tab-image" style="background-image: url('./images/product_03.jpg')"></div>
                 </button>
                 <span class="product-tab-label">퍼즐매트</span>
+              </div>
+            </div>
+
+            <!-- 경쟁사 비교 (롤매트 선택 시만 표시) -->
+            <div id="competitor-section" class="competitor-section" style="display: none;">
+              <div class="competitor-header">
+                <span class="competitor-title">경쟁사 비교</span>
+              </div>
+              <div class="product-tabs competitor-tabs">
+                <div class="product-tab-item competitor-tab-item">
+                  <button class="product-tab-btn competitor-tab-btn" data-product="riposoRoll">
+                    <div class="product-tab-image" style="background-image: url('./images/roll-mat-placeholder.svg')"></div>
+                  </button>
+                  <span class="product-tab-label">리포소 롤매트</span>
+                </div>
               </div>
             </div>
           </section>
@@ -162,6 +179,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="./js/constants.js"></script>
+    <script src="./js/product-config.js"></script>
     <script src="./js/prices.js"></script>
     <script src="./js/utils.js"></script>
     <script src="./js/calculations.js"></script>

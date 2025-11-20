@@ -1,4 +1,5 @@
-// 가격 정보 및 제품 데이터
+// 가격 정보 (하위 호환성을 위해 유지)
+// 새로운 제품 추가는 product-config.js에서 하세요!
 
 // 퍼즐매트 가격 정보 (100×100cm 1pcs 기준)
 const PUZZLE_PRICES = {
@@ -17,6 +18,11 @@ const ROLL_PRICES = {
   22: { 110: 19100, 120: 20900, 125: 20900 }
 };
 
+// 리포소홈 롤매트 가격 정보 (50cm 기준, 두께별/폭별)
+const LIPOSOHOME_ROLL_PRICES = {
+  17: { 80: 10900, 90: 11900, 100: 12900, 110: 13900, 120: 15400, 130: 16400, 135: 17900 }
+};
+
 // 롤매트 폭 우선순위
 const ROLL_WIDTH_PRIORITY = {
   70: 2,   // 다음 우선순위
@@ -24,6 +30,17 @@ const ROLL_WIDTH_PRIORITY = {
   120: 1,  // 높은 우선순위
   125: 3,  // 최하위 우선순위 (단종 예정)
   140: 1   // 높은 우선순위
+};
+
+// 리포소홈 롤매트 폭 우선순위
+const LIPOSOHOME_ROLL_WIDTH_PRIORITY = {
+  80: 2,   // 다음 우선순위
+  90: 2,   // 다음 우선순위
+  100: 1,  // 높은 우선순위
+  110: 1,  // 높은 우선순위
+  120: 1,  // 높은 우선순위
+  130: 1,  // 높은 우선순위
+  135: 2   // 다음 우선순위
 };
 
 // 롤매트 두께별 최대 길이 (cm)
@@ -36,8 +53,25 @@ const ROLL_MAX_LENGTH = {
   22: 600    // 6m
 };
 
-// 롤매트 폭 우선순위 가져오기
-function getRollWidthPriority(width, thickness) {
+// 리포소홈 롤매트 두께별 최대 길이 (cm)
+const LIPOSOHOME_ROLL_MAX_LENGTH = {
+  17: 700   // 7m
+};
+
+// ========== 헬퍼 함수 (리팩토링 버전) ==========
+
+/**
+ * 롤매트 폭 우선순위 가져오기
+ * @deprecated 대신 product-config.js의 getWidthPriority() 사용 권장
+ */
+function getRollWidthPriority(width, thickness, productType) {
+  if (typeof getWidthPriority === 'function') {
+    return getWidthPriority(productType, width);
+  }
+
+  // 폴백: 기존 로직
+  if (productType === 'riposoRoll') {
+    return LIPOSOHOME_ROLL_WIDTH_PRIORITY[width] ?? 2;
+  }
   return ROLL_WIDTH_PRIORITY[width] ?? 2;
 }
-

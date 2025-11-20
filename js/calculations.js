@@ -13,12 +13,21 @@ function getCurrentPrice(currentProduct, currentThickness) {
   if (currentProduct === 'puzzle') {
     return PUZZLE_PRICES[currentThickness] || PUZZLE_PRICES[25];
   }
-  return null; // 롤매트는 별도 처리
+  return null; // 롤매트는 별도 처리 (폭에 따라 가격이 다름)
 }
 
 // 롤매트 두께별 사용 가능한 폭 목록
-function getAvailableRollWidths(currentThickness) {
+function getAvailableRollWidths(currentThickness, currentProduct) {
+  // product-config.js의 함수 사용 (있으면)
+  if (typeof getAvailableWidths === 'function') {
+    return getAvailableWidths(currentProduct, currentThickness);
+  }
+
+  // 폴백: 기존 로직
   const thickness = parseInt(currentThickness);
+  if (currentProduct === 'riposoRoll') {
+    return Object.keys(LIPOSOHOME_ROLL_PRICES[thickness] || {}).map(Number);
+  }
   return Object.keys(ROLL_PRICES[thickness] || {}).map(Number);
 }
 
@@ -108,9 +117,9 @@ function getPreferredRollAxis(width, height) {
 }
 
 // 최적의 롤매트 폭 조합 찾기
-function generateRollWidthCombinations(targetWidth, mode, currentThickness, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
+function generateRollWidthCombinations(targetWidth, mode, currentThickness, currentProduct, { exactOverageCap = EXACT_OVERAGE_CAP_CM } = {}) {
   const thickness = parseInt(currentThickness);
-  const availableWidths = getAvailableRollWidths(currentThickness);
+  const availableWidths = getAvailableRollWidths(currentThickness, currentProduct);
   const combinations = [];
 
   // 1. 모든 가능한 단일 폭 조합
@@ -130,7 +139,7 @@ function generateRollWidthCombinations(targetWidth, mode, currentThickness, { ex
             waste,
             wastePercent,
             rollCount: count,
-            priority: getRollWidthPriority(width, thickness),
+            priority: getRollWidthPriority(width, thickness, currentProduct),
             sameWidth: true
           });
 
@@ -148,7 +157,7 @@ function generateRollWidthCombinations(targetWidth, mode, currentThickness, { ex
             waste: -shortage,
             wastePercent: -shortagePercent,
             rollCount: count,
-            priority: getRollWidthPriority(width, thickness),
+            priority: getRollWidthPriority(width, thickness, currentProduct),
             sameWidth: true
           });
         } else {
@@ -175,7 +184,7 @@ function generateRollWidthCombinations(targetWidth, mode, currentThickness, { ex
           if (totalWidth >= targetWidth && totalWidth <= targetWidth + exactOverageCap) {
             const waste = totalWidth - targetWidth;
             const wastePercent = (waste / totalWidth) * 100;
-            const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
+            const avgPriority = (getRollWidthPriority(w1, thickness, currentProduct) + getRollWidthPriority(w2, thickness, currentProduct)) / 2;
 
             combinations.push({
               mode,
@@ -195,7 +204,7 @@ function generateRollWidthCombinations(targetWidth, mode, currentThickness, { ex
           if (totalWidth <= targetWidth) {
             const shortage = targetWidth - totalWidth;
             const shortagePercent = (shortage / targetWidth) * 100;
-            const avgPriority = (getRollWidthPriority(w1, thickness) + getRollWidthPriority(w2, thickness)) / 2;
+            const avgPriority = (getRollWidthPriority(w1, thickness, currentProduct) + getRollWidthPriority(w2, thickness, currentProduct)) / 2;
 
             combinations.push({
               mode,
@@ -239,7 +248,7 @@ function generateRollWidthCombinations(targetWidth, mode, currentThickness, { ex
 }
 
 // 롤매트 계산 함수
-function calculateRollMat(width, height, mode, currentThickness, { isPet = false, forceAxis } = {}) {
+function calculateRollMat(width, height, mode, currentThickness, currentProduct, { isPet = false, forceAxis } = {}) {
   let targetWidth, targetLength;
   let widthAxis = 'width';
 
@@ -263,12 +272,13 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
   }
 
   const thickness = parseInt(currentThickness);
-  const looseCombos = generateRollWidthCombinations(targetWidth, 'loose', currentThickness);
-  const exactCombos = generateRollWidthCombinations(targetWidth, 'exact', currentThickness);
+  const looseCombos = generateRollWidthCombinations(targetWidth, 'loose', currentThickness, currentProduct);
+  const exactCombos = generateRollWidthCombinations(targetWidth, 'exact', currentThickness, currentProduct);
   const extendedExactCombos = generateRollWidthCombinations(
     targetWidth,
     'exact',
     currentThickness,
+    currentProduct,
     { exactOverageCap: EXTENDED_EXACT_OVERAGE_CAP_CM }
   );
 
@@ -307,7 +317,15 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
     });
   }
 
-  const maxLength = ROLL_MAX_LENGTH[thickness] || Infinity;
+  // 제품별로 최대 길이 가져오기
+  let maxLength;
+  if (typeof getMaxRollLength === 'function') {
+    maxLength = getMaxRollLength(currentProduct, currentThickness);
+  } else {
+    // 폴백: 기존 로직
+    const maxLengthTable = currentProduct === 'riposoRoll' ? LIPOSOHOME_ROLL_MAX_LENGTH : ROLL_MAX_LENGTH;
+    maxLength = maxLengthTable[thickness] || Infinity;
+  }
   let calculatedLength;
   const lengthCeil = ceilDiv(targetLength, 50) * 50;
   const lengthFloor = Math.floor(targetLength / 50) * 50;
@@ -334,6 +352,7 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
   }
 
   const lengthIn50cm = rollLength / 50;
+
   const evaluatedCombos = combinationCandidates.map(combo => {
     const usedWidth = combo.solutions.reduce((sum, sol) => sum + (sol.width * sol.count), 0);
     const widthDiff = usedWidth - targetWidth;
@@ -342,7 +361,16 @@ function calculateRollMat(width, height, mode, currentThickness, { isPet = false
     let comboPrice = 0;
     let valid = true;
     combo.solutions.forEach(sol => {
-      const pricePerUnit = ROLL_PRICES[thickness][sol.width];
+      // product-config.js의 함수 사용 (있으면)
+      let pricePerUnit;
+      if (typeof getRollPrice === 'function') {
+        pricePerUnit = getRollPrice(currentProduct, currentThickness, sol.width);
+      } else {
+        // 폴백: 기존 로직
+        const priceTable = currentProduct === 'riposoRoll' ? LIPOSOHOME_ROLL_PRICES : ROLL_PRICES;
+        pricePerUnit = priceTable[thickness]?.[sol.width];
+      }
+
       if (pricePerUnit == null) {
         valid = false;
         return;
@@ -671,10 +699,10 @@ function calculateSimpleSpace(name, width, height, type, mode, currentProduct, c
     result = calculate100(W, H, appliedMode, currentProduct, currentThickness);
   } else if (type === 'roll') {
     const appliedMode = mode === 'auto' ? 'loose' : mode;
-    result = calculateRollMat(W, H, appliedMode, currentThickness, { isPet: false });
+    result = calculateRollMat(W, H, appliedMode, currentThickness, currentProduct, { isPet: false });
   } else if (type === 'petRoll') {
     const appliedMode = mode === 'auto' ? 'loose' : mode;
-    result = calculateRollMat(W, H, appliedMode, currentThickness, { isPet: true });
+    result = calculateRollMat(W, H, appliedMode, currentThickness, currentProduct, { isPet: true });
   } else {
     result = calculatePuzzleAuto(W, H, currentProduct, currentThickness);
   }
@@ -739,7 +767,7 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
   const boundingHeight = maxY - minY;
 
   if (isRollMat) {
-    return calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boundingHeight, offsetX, offsetY, currentThickness);
+    return calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boundingHeight, offsetX, offsetY, currentThickness, currentProduct);
   }
 
   const gridSize = 50;
@@ -751,10 +779,37 @@ function calculateComplexSpace(name, pieces, type, mode, currentProduct, current
     const basePieceX = piece.x + offsetX;
     const basePieceY = piece.y + offsetY;
 
-    const startCol = Math.floor(basePieceX / gridSize);
-    const startRow = Math.floor(basePieceY / gridSize);
-    const endCol = Math.ceil((basePieceX + piece.w) / gridSize);
-    const endRow = Math.ceil((basePieceY + piece.h) / gridSize);
+    let startCol = Math.floor(basePieceX / gridSize);
+    let startRow = Math.floor(basePieceY / gridSize);
+    let endCol = Math.ceil((basePieceX + piece.w) / gridSize);
+    let endRow = Math.ceil((basePieceY + piece.h) / gridSize);
+
+    // 25cm 규칙 적용 (loose 모드일 때만)
+    if (appliedMode === 'loose') {
+      // 왼쪽 여백 확인
+      const leftOverlap = (startCol + 1) * gridSize - basePieceX;
+      if (leftOverlap < 25 && leftOverlap > 0) {
+        startCol++; // 25cm 미만이면 해당 열 제외
+      }
+
+      // 오른쪽 여백 확인
+      const rightOverlap = (basePieceX + piece.w) - (endCol - 1) * gridSize;
+      if (rightOverlap < 25 && rightOverlap > 0) {
+        endCol--; // 25cm 미만이면 해당 열 제외
+      }
+
+      // 위쪽 여백 확인
+      const topOverlap = (startRow + 1) * gridSize - basePieceY;
+      if (topOverlap < 25 && topOverlap > 0) {
+        startRow++; // 25cm 미만이면 해당 행 제외
+      }
+
+      // 아래쪽 여백 확인
+      const bottomOverlap = (basePieceY + piece.h) - (endRow - 1) * gridSize;
+      if (bottomOverlap < 25 && bottomOverlap > 0) {
+        endRow--; // 25cm 미만이면 해당 행 제외
+      }
+    }
 
     for (let row = startRow; row < endRow && row < gridRows; row++) {
       for (let col = startCol; col < endCol && col < gridCols; col++) {
@@ -946,7 +1001,7 @@ function buildRollRectanglesFromPiecesY(pieces) {
 }
 
 // 복합 공간 롤매트 계산
-function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boundingHeight, offsetX, offsetY, currentThickness) {
+function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boundingHeight, offsetX, offsetY, currentThickness, currentProduct) {
   const isPet = type === 'petRoll';
 
   const normalizedPieces = pieces.map(piece => ({
@@ -977,7 +1032,7 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
       ['width', 'height'].forEach(axis => {
         let rollResult = null;
         if (mode === 'auto') {
-          const looseResult = calculateRollMat(rect.width, rect.height, 'loose', currentThickness, { isPet, forceAxis: axis });
+          const looseResult = calculateRollMat(rect.width, rect.height, 'loose', currentThickness, currentProduct, { isPet, forceAxis: axis });
           if (looseResult) {
             const usedWidth = looseResult.usedWidth || rect.width;
             const actualRollLength = looseResult.rollLength || (looseResult.widthAxis === 'width'
@@ -992,13 +1047,13 @@ function calculateComplexSpaceRoll(name, pieces, type, mode, boundingWidth, boun
             const needsLengthAdjust = lengthShortage >= 20;
 
             if (needsWidthAdjust || needsLengthAdjust) {
-              rollResult = calculateRollMat(rect.width, rect.height, 'exact', currentThickness, { isPet, forceAxis: axis });
+              rollResult = calculateRollMat(rect.width, rect.height, 'exact', currentThickness, currentProduct, { isPet, forceAxis: axis });
             } else {
               rollResult = looseResult;
             }
           }
         } else {
-          rollResult = calculateRollMat(rect.width, rect.height, mode, currentThickness, { isPet, forceAxis: axis });
+          rollResult = calculateRollMat(rect.width, rect.height, mode, currentThickness, currentProduct, { isPet, forceAxis: axis });
         }
 
         if (rollResult && rollResult.solutions) {

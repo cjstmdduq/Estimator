@@ -23,6 +23,9 @@
   let currentProduct = 'babyRoll';
   let currentThickness = '25';  // 기본 두께
 
+  // 제품별 마지막 선택 두께 기억 (제품 간 이동 시 이전 선택 유지)
+  const productThicknessMemory = {};
+
   // ========== 제품 정보 ==========
   const PRODUCTS = {
     puzzle: {
@@ -45,6 +48,27 @@
       imageReal: './images/product_02.jpg',
       description: '두께 선택: 6T / 9T / 12T',
       link: 'https://brand.naver.com/ddasaroom/products/4200445704'
+    },
+    riposoRoll: {
+      name: '리포소 롤매트',
+      image: './images/riposo_roll.jpg',
+      imageReal: './images/riposo_roll.jpg',
+      description: '두께: 17T',
+      link: 'https://www.riposo.co.kr'
+    },
+    parklonRoll: {
+      name: '파크론 롤매트',
+      image: './images/parkron_roll.jpg',
+      imageReal: './images/parkron_roll.jpg',
+      description: '두께: 17T / 22T',
+      link: 'https://www.parklon.co.kr'
+    },
+    tgoRoll: {
+      name: '티지오 롤매트',
+      image: './images/tgo_roll.jpg',
+      imageReal: './images/tgo_roll.jpg',
+      description: '두께: 10T / 14T / 24T / 34T',
+      link: 'https://www.tgo.co.kr'
     }
   };
 
@@ -55,32 +79,80 @@
     const $thicknessSelector = document.getElementById('thickness-selector');
 
     let thicknesses = [];
+    let defaultThickness = currentThickness;
 
-    if (currentProduct === 'puzzle') {
-      thicknesses = [
-        { value: '25', label: '25T' },
-        { value: '25plus', label: '25T Plus+' },
-        { value: '40', label: '40T' }
-      ];
-      currentThickness = currentThickness || '25';
-    } else if (currentProduct === 'babyRoll') {
-      thicknesses = [
-        { value: '12', label: '12T' },
-        { value: '17', label: '17T' },
-        { value: '22', label: '22T' }
-      ];
-      // 14T는 단종 예정이므로 선택 불가, 현재 선택된 경우 기본값으로 변경
-      if (currentThickness === '14') {
-        currentThickness = '12';
+    // product-config.js에서 제품 설정 가져오기 (있으면)
+    if (typeof getProductConfig === 'function') {
+      const config = getProductConfig(currentProduct);
+      if (config) {
+        thicknesses = config.thicknesses || [];
+        defaultThickness = config.defaultThickness || currentThickness;
+
+        // 이 제품에 대해 이전에 선택한 두께가 있으면 사용
+        if (productThicknessMemory[currentProduct]) {
+          currentThickness = productThicknessMemory[currentProduct];
+        } else {
+          // 없으면 현재 두께가 유효한지 확인
+          const validValues = thicknesses.map(t => t.value);
+          if (!validValues.includes(currentThickness)) {
+            currentThickness = defaultThickness;
+          }
+        }
       }
-      currentThickness = ['12', '17', '22'].includes(currentThickness) ? currentThickness : '12';
-    } else if (currentProduct === 'petRoll') {
-      thicknesses = [
-        { value: '6', label: '6T' },
-        { value: '9', label: '9T' },
-        { value: '12', label: '12T' }
-      ];
-      currentThickness = ['6', '9', '12'].includes(currentThickness) ? currentThickness : '9';
+    } else {
+      // 폴백: 기존 로직
+      if (currentProduct === 'puzzle') {
+        thicknesses = [
+          { value: '25', label: '25T' },
+          { value: '25plus', label: '25T Plus+' },
+          { value: '40', label: '40T' }
+        ];
+        defaultThickness = '25';
+      } else if (currentProduct === 'babyRoll') {
+        thicknesses = [
+          { value: '12', label: '12T' },
+          { value: '17', label: '17T' },
+          { value: '22', label: '22T' }
+        ];
+        defaultThickness = '17';
+      } else if (currentProduct === 'petRoll') {
+        thicknesses = [
+          { value: '6', label: '6T' },
+          { value: '9', label: '9T' },
+          { value: '12', label: '12T' }
+        ];
+        defaultThickness = '9';
+      } else if (currentProduct === 'riposoRoll') {
+        thicknesses = [
+          { value: '17', label: '17T' }
+        ];
+        defaultThickness = '17';
+      } else if (currentProduct === 'parklonRoll') {
+        thicknesses = [
+          { value: '17', label: '17T' },
+          { value: '22', label: '22T' }
+        ];
+        defaultThickness = '17';
+      } else if (currentProduct === 'tgoRoll') {
+        thicknesses = [
+          { value: '10', label: '10T' },
+          { value: '14', label: '14T' },
+          { value: '24', label: '24T' },
+          { value: '34', label: '34T' }
+        ];
+        defaultThickness = '14';
+      }
+
+      // 이 제품에 대해 이전에 선택한 두께가 있으면 사용
+      if (productThicknessMemory[currentProduct]) {
+        currentThickness = productThicknessMemory[currentProduct];
+      } else {
+        // 없으면 현재 두께가 유효한지 확인
+        const validValues = thicknesses.map(t => t.value);
+        if (!validValues.includes(currentThickness)) {
+          currentThickness = defaultThickness;
+        }
+      }
     }
 
     // 두께 버튼 생성
@@ -92,6 +164,8 @@
     document.querySelectorAll('.thickness-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         currentThickness = btn.dataset.thickness;
+        // 제품별로 선택한 두께 기억
+        productThicknessMemory[currentProduct] = currentThickness;
         updateThicknessSelector();
         calculate();
       });
@@ -106,24 +180,152 @@
     currentProduct = productType;
 
     // 제품에 따라 기본 두께 설정
-    if (productType === 'puzzle') {
-      currentThickness = '25';  // 퍼즐매트 기본: 25T
-    } else if (productType === 'babyRoll') {
-      currentThickness = '12';   // 유아 롤매트 기본: 12T
-    } else if (productType === 'petRoll') {
-      currentThickness = '9';   // 애견 롤매트 기본: 9T
+    if (typeof getProductConfig === 'function') {
+      const config = getProductConfig(productType);
+      if (config && config.defaultThickness) {
+        currentThickness = config.defaultThickness;
+      }
+    } else {
+      // 폴백: 기존 로직
+      if (productType === 'puzzle') {
+        currentThickness = '25';  // 퍼즐매트 기본: 25T
+      } else if (productType === 'babyRoll') {
+        currentThickness = '12';   // 유아 롤매트 기본: 12T
+      } else if (productType === 'petRoll') {
+        currentThickness = '9';   // 애견 롤매트 기본: 9T
+      } else if (productType === 'riposoRoll') {
+        currentThickness = '17';   // 리포소 롤매트: 17T
+      } else if (productType === 'parklonRoll') {
+        currentThickness = '17';   // 파크론 롤매트: 17T
+      } else if (productType === 'tgoRoll') {
+        currentThickness = '14';   // 티지오 롤매트: 14T
+      }
     }
 
-    // 구매 링크 업데이트
+    // 구매 링크 업데이트 및 표시 여부 결정
     $purchaseLink.href = product.link;
+
+    // 경쟁사 제품인지 확인
+    let isCompetitor = false;
+    if (typeof getProductConfig === 'function') {
+      const config = getProductConfig(productType);
+      isCompetitor = config && config.vendor !== 'ddasaroom';
+    } else {
+      // 폴백: 경쟁사 제품들
+      isCompetitor = ['riposoRoll', 'parklonRoll', 'tgoRoll'].includes(productType);
+    }
+
+    // 경쟁사 제품이면 구매 링크 숨김
+    if (isCompetitor) {
+      $purchaseLink.style.display = 'none';
+    } else {
+      $purchaseLink.style.display = '';
+    }
+
+    // 경쟁사 비교 섹션 표시 및 업데이트
+    const $competitorSection = document.getElementById('competitor-section');
+    if ($competitorSection) {
+      // 현재 제품에 대응하는 경쟁사 제품 가져오기
+      let competitors = [];
+      let targetProductForCompetitors = productType;
+
+      // 경쟁사 제품을 선택한 경우, 부모 제품의 경쟁사 목록을 표시
+      if (typeof getProductConfig === 'function') {
+        const config = getProductConfig(productType);
+        if (config && config.competitorFor) {
+          // 경쟁사 제품이면 부모 제품의 경쟁사 목록 표시
+          targetProductForCompetitors = config.competitorFor;
+        }
+        competitors = getCompetitorProducts(targetProductForCompetitors);
+      } else {
+        // 폴백: babyRoll 또는 경쟁사 제품이면 모든 경쟁사 표시
+        if (productType === 'babyRoll' || ['riposoRoll', 'parklonRoll', 'tgoRoll'].includes(productType)) {
+          competitors = ['riposoRoll', 'parklonRoll', 'tgoRoll'];
+        }
+      }
+
+      // 경쟁사가 있으면 표시, 없으면 숨김
+      if (competitors.length > 0) {
+        updateCompetitorDisplay(competitors);
+        $competitorSection.style.display = '';
+      } else {
+        $competitorSection.style.display = 'none';
+      }
+    }
 
     // 두께 선택 UI 업데이트
     updateThicknessSelector();
 
     // 계산 방식 섹션 제거됨 (퍼즐매트는 항상 최적조합 방식 사용)
 
+    // 경쟁사 제품을 선택한 경우, 부모 제품에 parent-active 적용
+    if (isCompetitor) {
+      const config = getProductConfig(productType);
+      const parentProductId = config?.competitorFor;
+      if (parentProductId) {
+        // 부모 제품 버튼 찾기
+        const parentBtn = document.querySelector(`.product-tabs:not(.competitor-tabs) .product-tab-btn[data-product="${parentProductId}"]`);
+        if (parentBtn) {
+          parentBtn.classList.remove('active');
+          parentBtn.classList.add('parent-active');
+        }
+      }
+    }
+
     // 기존 공간들의 매트 타입 옵션 업데이트
     updateAllSpaceMatTypes();
+  }
+
+  // 경쟁사 제품 표시 업데이트
+  function updateCompetitorDisplay(competitorIds) {
+    const $competitorTabs = document.querySelector('.competitor-tabs');
+    if (!$competitorTabs) return;
+
+    // 경쟁사 제품 버튼 생성
+    const html = competitorIds.map(productId => {
+      const product = PRODUCTS[productId];
+      if (!product) return '';
+
+      return `
+        <div class="product-tab-item competitor-tab-item">
+          <button class="product-tab-btn competitor-tab-btn" data-product="${productId}">
+            <div class="product-tab-image" style="background-image: url('${product.image}')"></div>
+          </button>
+          <span class="product-tab-label">${product.name}</span>
+        </div>
+      `;
+    }).join('');
+
+    $competitorTabs.innerHTML = html;
+
+    // 새로 생성된 버튼에 이벤트 리스너 등록
+    const newButtons = $competitorTabs.querySelectorAll('.product-tab-btn');
+    newButtons.forEach(btn => {
+      // 현재 선택된 제품이면 active 클래스 추가
+      if (btn.dataset.product === currentProduct) {
+        btn.classList.add('active');
+      }
+
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+
+        // 경쟁사 탭 내에서만 active 클래스 제거
+        $competitorTabs.querySelectorAll('.product-tab-btn').forEach(b => b.classList.remove('active'));
+
+        // 클릭된 경쟁사 탭에 active 클래스 추가
+        btn.classList.add('active');
+
+        // 따사룸 제품 버튼들의 active를 parent-active로 변경
+        document.querySelectorAll('.product-tabs:not(.competitor-tabs) .product-tab-btn.active').forEach(parentBtn => {
+          parentBtn.classList.remove('active');
+          parentBtn.classList.add('parent-active');
+        });
+
+        // 제품 정보 업데이트
+        const productType = btn.dataset.product;
+        updateProductDisplay(productType);
+      });
+    });
   }
 
   // 제품 변경 시 자동 재계산
@@ -195,6 +397,8 @@
           productType = 'roll';
         } else if (currentProduct === 'petRoll') {
           productType = 'petRoll';
+        } else if (['riposoRoll', 'parklonRoll', 'tgoRoll'].includes(currentProduct)) {
+          productType = 'roll';
         }
 
         let result;
@@ -403,7 +607,18 @@
           totalCompositionHTML += `<div style="margin: 18px 0; border-top: 2px solid #e2e8f0;"></div>`;
         }
       });
-      if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+
+      // 온도 변화 안내 메시지 표시 (제품 설정에서 확인)
+      let showThermalNotice = false;
+      if (typeof getProductConfig === 'function') {
+        const config = getProductConfig(currentProduct);
+        showThermalNotice = config && config.showThermalNotice;
+      } else {
+        // 폴백: 롤매트 제품들은 온도 안내 표시
+        showThermalNotice = ['babyRoll', 'petRoll', 'riposoRoll', 'parklonRoll', 'tgoRoll'].includes(currentProduct);
+      }
+
+      if (showThermalNotice) {
         totalCompositionHTML += `<div style="margin-top: 12px; color: #94a3b8; font-size: 12px;">온도 변화에 따른 수축을 고려해, 폭·길이 모두 여유 있게 출고됩니다.</div>`;
       }
     } else {
@@ -432,12 +647,24 @@
         if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
         if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
         quantityText = parts.join(' / ');
-      } else if (currentProduct === 'babyRoll') {
-        quantityText = totalRolls > 0 ? `${totalRolls}롤` : '0롤';
-      } else if (currentProduct === 'petRoll') {
-        quantityText = totalRolls > 0 ?
-          `${totalRolls}롤 (50cm ${totalRollUnits}개)` :
-          '0롤';
+      } else {
+        // 롤매트 제품들 - 50cm 개수 표시 여부 확인
+        let showRollUnits = false;
+        if (typeof getProductConfig === 'function') {
+          const config = getProductConfig(currentProduct);
+          showRollUnits = config && config.showRollUnits;
+        } else {
+          // 폴백: petRoll만 50cm 개수 표시
+          showRollUnits = (currentProduct === 'petRoll');
+        }
+
+        if (showRollUnits) {
+          quantityText = totalRolls > 0 ?
+            `${totalRolls}롤 (50cm ${totalRollUnits}개)` :
+            '0롤';
+        } else {
+          quantityText = totalRolls > 0 ? `${totalRolls}롤` : '0롤';
+        }
       }
       const priceText = KRW.format(totalPrice);
       totalSummaryHTML = `${quantityText}<br><span style="color: #2563eb; font-weight: 600;">${priceText}</span> <span class="muted small">(할인 미적용가)</span>`;
@@ -640,8 +867,18 @@
       if (total100 > 0) parts.push(`100×100cm 1pcs: ${total100}장`);
       if (total50 > 0) parts.push(`50×50cm 4pcs: ${total50}장`);
       text += `수량 : ${parts.join(' / ')}\n`;
-    } else if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
-      if (currentProduct === 'petRoll') {
+    } else {
+      // 롤매트 제품들 - 50cm 개수 표시 여부 확인
+      let showRollUnits = false;
+      if (typeof getProductConfig === 'function') {
+        const config = getProductConfig(currentProduct);
+        showRollUnits = config && config.showRollUnits;
+      } else {
+        // 폴백: petRoll만 50cm 개수 표시
+        showRollUnits = (currentProduct === 'petRoll');
+      }
+
+      if (showRollUnits) {
         text += `수량 : ${totalRolls}롤 (50cm ${totalRollUnits}개)\n`;
       } else {
         text += `수량 : ${totalRolls}롤\n`;
@@ -651,7 +888,18 @@
 
     text = text.replace(/\n+$/, '\n\n');
     text += '[유의사항]\n';
-    if (currentProduct === 'babyRoll' || currentProduct === 'petRoll') {
+
+    // 온도 변화 안내 메시지 표시 (제품 설정에서 확인)
+    let showThermalNotice = false;
+    if (typeof getProductConfig === 'function') {
+      const config = getProductConfig(currentProduct);
+      showThermalNotice = config && config.showThermalNotice;
+    } else {
+      // 폴백: 롤매트 제품들은 온도 안내 표시
+      showThermalNotice = (currentProduct === 'babyRoll' || currentProduct === 'petRoll' || currentProduct === 'riposoRoll');
+    }
+
+    if (showThermalNotice) {
       text += '온도 변화에 따른 수축을 고려해, 폭·길이 모두 여유 있게 출고됩니다.\n';
     }
     text += '견적은 참고용이므로 반드시 재확인 후 구매하시기 바랍니다.\n';
@@ -939,6 +1187,62 @@
 
     const summary = buildSpaceQuickSummary(result, spaceIdx || 0);
 
+    // 좌표 회전 버튼
+    const rotateBtn = document.createElement('button');
+    rotateBtn.className = 'rotate-coords-btn';
+    rotateBtn.title = '좌표 회전 (90도)';
+    rotateBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+    `;
+    rotateBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!complexSpacePieces || complexSpacePieces.length === 0) return;
+
+      // 전체 높이 계산 (회전 축 기준)
+      let maxY = 0;
+      complexSpacePieces.forEach(p => {
+        maxY = Math.max(maxY, p.y + p.h);
+      });
+
+      // 각 조각 회전
+      complexSpacePieces.forEach(piece => {
+        const oldX = piece.x;
+        const oldY = piece.y;
+        const oldW = piece.w;
+        const oldH = piece.h;
+
+        // 90도 시계방향 회전 변환
+        // (x, y) -> (maxY - (y + h), x)
+        // w -> h, h -> w
+        const newX = maxY - (oldY + oldH);
+        const newY = oldX;
+        const newW = oldH;
+        const newH = oldW;
+
+        piece.x = newX;
+        piece.y = newY;
+        piece.w = newW;
+        piece.h = newH;
+
+        // UI 업데이트
+        const $x = document.getElementById(`piece-x-${piece.id}`);
+        const $y = document.getElementById(`piece-y-${piece.id}`);
+        const $w = document.getElementById(`piece-w-${piece.id}`);
+        const $h = document.getElementById(`piece-h-${piece.id}`);
+
+        if ($x) $x.value = newX;
+        if ($y) $y.value = newY;
+        if ($w) $w.value = newW;
+        if ($h) $h.value = newH;
+      });
+
+      updateComplexPreview();
+      calculate();
+    });
+    container.appendChild(rotateBtn);
+
     // 매트 표시/숨기기 토글 버튼
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'toggle-mat-btn';
@@ -1189,15 +1493,41 @@
 
       const summary = buildSpaceQuickSummary(result, idx);
 
+      // 좌표 회전 버튼 (단순 공간)
+      const rotateBtn = document.createElement('button');
+      rotateBtn.className = 'rotate-coords-btn';
+      rotateBtn.title = '좌표 회전 (가로/세로 교체)';
+      rotateBtn.innerHTML = `
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+    `;
+      rotateBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // spaces 배열에서 해당 공간 찾기
+        const space = spaces.find(s => s.id === result.index);
+        if (space && space.element) {
+          const wInput = space.element.querySelector('.space-w');
+          const hInput = space.element.querySelector('.space-h');
+          if (wInput && hInput) {
+            const temp = wInput.value;
+            wInput.value = hInput.value;
+            hInput.value = temp;
+            calculate();
+          }
+        }
+      });
+      container.appendChild(rotateBtn);
+
       // 매트 표시/숨기기 토글 버튼 (persistent state)
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'toggle-mat-btn';
       toggleBtn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-          <circle cx="12" cy="12" r="3"></circle>
-        </svg>
-      `;
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+        <circle cx="12" cy="12" r="3"></circle>
+      </svg>
+    `;
 
       // 컨테이너에 상태 저장 (초기값 설정)
       if (!('matsVisible' in container.dataset)) {
@@ -1232,12 +1562,12 @@
       downloadBtn.className = 'download-canvas-btn';
       downloadBtn.title = '이미지 다운로드';
       downloadBtn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
-      `;
+        `;
       downloadBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         downloadSpaceVisualization(container, summary.name);
@@ -1278,8 +1608,8 @@
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
       </svg>
-      견적 복사
-    `;
+        견적 복사
+          `;
     $copyEstimate.style.background = '';
     $copyEstimate.style.borderColor = '';
     $copyEstimate.style.color = '';
@@ -1294,7 +1624,7 @@
       // 성공 메시지
       $copyEstimate.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="20 6 9 17 4 12"></polyline>
+            <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
         복사 완료!
       `;
@@ -1335,13 +1665,23 @@
   const complexSpaceTemplates = [
     {
       id: 'type-84t',
-      name: '84t (거실+주방+복도)',
+      name: '거실+주방+복도(84타입)',
       pieces: [
-        { name: '조각 1', x: 50, y: 0, w: 300, h: 200 },
-        { name: '조각 2', x: 0, y: 200, w: 750, h: 110 },
-        { name: '조각 3', x: 0, y: 310, w: 420, h: 300 }
+        { name: '주방', x: 150, y: 0, w: 350, h: 260 },
+        { name: '복도', x: 0,   y: 264, w: 800, h: 115 },
+        { name: '거실', x: 150, y: 387, w: 420, h: 330 } 
+      ]
+    },
+    {
+      id: 'type-59t',
+      name: '거실+주방+복도 (59타입)',
+      pieces: [
+        { name: '주방', x: 105, y: 0,   w: 245, h: 230 },    
+        { name: '복도', x: 0,   y: 231, w: 560, h: 110 },    
+        { name: '거실', x: 105, y: 341, w: 294, h: 290 }
       ]
     }
+    
   ];
 
   function hideConnectivityWarning() {
@@ -1411,11 +1751,7 @@
 
     piece[key] = value;
     // 맞물림 제한 제거: 연결되지 않아도 값 업데이트 허용
-    if (!arePiecesConnected()) {
-      showConnectivityWarning();
-    } else {
-      hideConnectivityWarning();
-    }
+    hideConnectivityWarning();
     return true;
   }
 
@@ -1431,6 +1767,7 @@
     const template = complexSpaceTemplates.find(t => t.id === templateId);
     if (!template) return;
 
+
     complexSpacePieces = [];
     $piecesContainer.innerHTML = '';
 
@@ -1438,7 +1775,7 @@
       const piece = {
         id: pieceIdCounter++,
         index: idx,
-        name: pieceData.name || `조각 ${idx + 1}`,
+        name: pieceData.name || `조각 ${idx + 1} `,
         x: pieceData.x || 0,
         y: pieceData.y || 0,
         w: pieceData.w || 100,
@@ -1525,7 +1862,7 @@
     const piece = {
       id: pieceId,
       index: pieceIndex, // 색상 결정용 인덱스
-      name: `조각 ${pieceIndex + 1}`,
+      name: `조각 ${pieceIndex + 1} `,
       x: 0,
       y: 0,
       w: 300,
@@ -1616,10 +1953,10 @@
       // 최대값 제한 제거
       /*
       if (newWidth > 1500) {
-        newWidth = 1500;
-        $w.value = newWidth;
+              newWidth = 1500;
+            $w.value = newWidth;
       }
-      */
+            */
 
       if (tryUpdatePieceValue(piece, 'w', newWidth, $w)) {
         updateComplexPreview();
@@ -1647,10 +1984,10 @@
       // 최대값 제한 제거
       /*
       if (newHeight > 1500) {
-        newHeight = 1500;
-        $h.value = newHeight;
+              newHeight = 1500;
+            $h.value = newHeight;
       }
-      */
+            */
 
       if (tryUpdatePieceValue(piece, 'h', newHeight, $h)) {
         updateComplexPreview();
@@ -1747,12 +2084,6 @@
   function removePieceFromComplex(pieceId) {
     const index = complexSpacePieces.findIndex(p => p.id === pieceId);
     if (index > -1) {
-      const simulatedPieces = complexSpacePieces.filter(p => p.id !== pieceId);
-      if (simulatedPieces.length > 1 && !arePiecesConnected(simulatedPieces)) {
-        showConnectivityWarning();
-        return;
-      }
-
       complexSpacePieces.splice(index, 1);
       const $pieceCard = document.getElementById(`piece-${pieceId}`);
       if ($pieceCard) $pieceCard.remove();
@@ -1781,27 +2112,27 @@
     spaceDiv.dataset.spaceId = id;
 
     spaceDiv.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-        <h3 style="margin: 0;">공간 정보</h3>
-        <button class="remove-space" data-space-id="${id}">삭제</button>
-      </div>
-      <label class="space-name-label" style="${spaces.length > 0 ? 'display: flex;' : 'display: none;'}">
-        <span>공간 이름</span>
-        <input type="text" class="space-name" placeholder="예: 거실" value="" />
-      </label>
-      <div style="margin-bottom: 12px;">
-        <div class="grid">
-          <label>
-            <span>가로(cm)</span>
-            <input type="number" class="space-w" min="0" value="300" />
-          </label>
-          <label>
-            <span>세로(cm)</span>
-            <input type="number" class="space-h" min="0" value="200" />
-          </label>
-        </div>
-      </div>
-    `;
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+              <h3 style="margin: 0;">공간 정보</h3>
+              <button class="remove-space" data-space-id="${id}">삭제</button>
+            </div>
+            <label class="space-name-label" style="${spaces.length > 0 ? 'display: flex;' : 'display: none;'}">
+              <span>공간 이름</span>
+              <input type="text" class="space-name" placeholder="예: 거실" value="" />
+            </label>
+            <div style="margin-bottom: 12px;">
+              <div class="grid">
+                <label>
+                  <span>가로(cm)</span>
+                  <input type="number" class="space-w" min="0" value="300" />
+                </label>
+                <label>
+                  <span>세로(cm)</span>
+                  <input type="number" class="space-h" min="0" value="200" />
+                </label>
+              </div>
+            </div>
+            `;
 
     $spacesContainer.appendChild(spaceDiv);
 
@@ -1850,6 +2181,7 @@
         if (currentProduct === 'puzzle') return 'hybrid';
         if (currentProduct === 'babyRoll') return 'roll';
         if (currentProduct === 'petRoll') return 'petRoll';
+        if (['riposoRoll', 'parklonRoll', 'tgoRoll'].includes(currentProduct)) return 'roll';
         return 'hybrid';
       }
     });
@@ -1899,8 +2231,11 @@
       btn.addEventListener('click', () => {
         if (btn.disabled) return;
 
-        // 모든 탭에서 active 클래스 제거
-        tabButtons.forEach(b => b.classList.remove('active'));
+        // 모든 제품 탭에서 active와 parent-active 클래스 제거 (메인 제품 + 경쟁사)
+        document.querySelectorAll('.product-tab-btn').forEach(b => {
+          b.classList.remove('active');
+          b.classList.remove('parent-active');
+        });
 
         // 클릭된 탭에 active 클래스 추가
         btn.classList.add('active');

@@ -1,5 +1,11 @@
-:root { color-scheme: light; }
-* { box-sizing: border-box; }
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 @font-face {
   font-family: 'Pretendard';
   font-style: normal;
@@ -7,6 +13,7 @@
   src: url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/woff2/Pretendard-Regular.woff2') format('woff2');
   font-display: swap;
 }
+
 @font-face {
   font-family: 'Pretendard';
   font-style: normal;
@@ -14,6 +21,7 @@
   src: url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/woff2/Pretendard-Medium.woff2') format('woff2');
   font-display: swap;
 }
+
 @font-face {
   font-family: 'Pretendard';
   font-style: normal;
@@ -21,22 +29,78 @@
   src: url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/woff2/Pretendard-SemiBold.woff2') format('woff2');
   font-display: swap;
 }
+
 body {
   margin: 0;
   font-family: 'Pretendard', -apple-system, system-ui, Segoe UI, Roboto, sans-serif;
   color: #1f2933;
   background: #f9fafb;
 }
-.container { max-width: 780px; margin: 24px auto; padding: 0 16px; }
-h1 { font-size: 20px; margin: 0 0 12px; }
-h2 { font-size: 16px; margin: 0 0 12px; }
-.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
-.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #475569; }
-.space-name { margin-bottom: 12px; }
-input, select, button { font: inherit; }
-input, select { border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; color: #0f172a; background: #fff; }
-input:focus, select:focus { outline: 2px solid #93c5fd; border-color: #60a5fa; }
+
+.container {
+  max-width: 780px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.space-name {
+  margin-bottom: 12px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: #0f172a;
+  background: #fff;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid #93c5fd;
+  border-color: #60a5fa;
+}
 
 /* 버튼 공통 스타일 */
 button {
@@ -52,6 +116,7 @@ button {
   background: #2563eb;
   color: #fff;
 }
+
 .primary:hover {
   background: #1e3fa7;
 }
@@ -61,6 +126,7 @@ button {
   color: #2563eb;
   border: 1px solid #cbd5ff;
 }
+
 .secondary:hover {
   background: #eef2ff;
 }
@@ -71,6 +137,7 @@ button {
   padding: 6px 14px;
   font-size: 13px;
 }
+
 .remove-space:hover {
   background: #fecaca;
 }
@@ -122,9 +189,20 @@ button {
   background: #eef2ff;
 }
 
-.result { display: grid; gap: 6px; font-size: 14px; }
-.muted { color: #94a3b8; }
-.small { font-size: 12px; }
+.result {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.small {
+  font-size: 12px;
+}
+
 .space-section {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -174,6 +252,11 @@ button {
   background: #eff6ff;
 }
 
+.product-tab-btn.parent-active {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
 .product-tab-btn:hover {
   border-color: #cbd5e1;
 }
@@ -182,11 +265,64 @@ button {
   border-color: #2563eb;
 }
 
+.product-tab-btn.parent-active:hover {
+  border-color: #94a3b8;
+}
+
 .product-tab-label {
   font-size: 14px;
   font-weight: 500;
   color: #475569;
   text-align: center;
+}
+
+/* 경쟁사 비교 섹션 */
+.competitor-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.competitor-header {
+  margin-bottom: 12px;
+}
+
+.competitor-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.competitor-tabs {
+  gap: 12px;
+  justify-content: flex-start;
+}
+
+.competitor-tab-item {
+  flex: 0 0 auto;
+  max-width: 100px;
+}
+
+.competitor-tab-btn {
+  border-width: 2px;
+}
+
+.competitor-tab-btn.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.competitor-tab-btn:hover {
+  border-color: #cbd5e1;
+}
+
+.competitor-tab-btn.active:hover {
+  border-color: #2563eb;
+}
+
+.competitor-section .product-tab-label {
+  font-size: 12px;
+  color: #64748b;
 }
 
 /* 두께 선택 탭 */
@@ -373,7 +509,10 @@ button {
   }
 }
 
-.price-highlight { font-size: 16px; color: #1e293b; }
+.price-highlight {
+  font-size: 16px;
+  color: #1e293b;
+}
 
 .space-visual-wrapper {
   margin: 18px 0 0;
@@ -482,6 +621,7 @@ button {
 
 /* 시각화 버튼들 */
 .toggle-mat-btn,
+.rotate-coords-btn,
 .download-canvas-btn {
   position: absolute;
   top: 12px;
@@ -503,11 +643,16 @@ button {
   right: 60px;
 }
 
+.rotate-coords-btn {
+  right: 108px;
+}
+
 .download-canvas-btn {
   right: 12px;
 }
 
 .toggle-mat-btn:hover,
+.rotate-coords-btn:hover,
 .download-canvas-btn:hover {
   background: #eef2ff;
   transform: scale(1.05);
@@ -520,13 +665,13 @@ button {
   border-color: #94a3b8 !important;
   color: #475569 !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .move-piece-btn:active,
 .align-piece-btn:active {
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* 공간조각 추가 버튼 (add-space보다 살짝 작게) */
@@ -594,28 +739,35 @@ button {
 }
 
 .template-btn {
-  border: 1px solid #cbd5f5;
-  border-radius: 6px;
-  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
   background: white;
   cursor: pointer;
-  font-size: 13px;
-  color: #1d4ed8;
+  font-size: 14px;
+  color: #475569;
   font-weight: 500;
-  transition: all 0.15s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 .template-btn:hover {
-  background: #e0e7ff;
-  border-color: #94a3ff;
-  color: #1e3a8a;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .template-btn.active {
-  background: #1d4ed8;
-  color: white;
-  border-color: #1e40af;
-  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+  font-weight: 600;
 }
 
 .complex-warning {
