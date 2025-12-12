@@ -30,22 +30,22 @@
   const PRODUCTS = {
     puzzle: {
       name: '퍼즐매트',
-      image: '../../assets/images/products/product2.png',
-      imageReal: '../../assets/images/estimator/product_03.jpg',
+      image: './assets/images/products/product2.png',
+      imageReal: './assets/images/estimator/product_03.jpg',
       description: '두께 선택: 25T / 25T Plus+ / 40T',
       link: 'https://brand.naver.com/ddasaroom/products/5994906898'
     },
     babyRoll: {
       name: '유아 롤매트',
-      image: '../../assets/images/products/product1.png',
-      imageReal: '../../assets/images/estimator/product_01.jpg',
+      image: './assets/images/products/product1.png',
+      imageReal: './assets/images/estimator/product_01.jpg',
       description: '두께 선택: 12T / 17T / 22T',
       link: 'https://brand.naver.com/ddasaroom/products/6092903705'
     },
     petRoll: {
       name: '애견 롤매트',
-      image: '../../assets/images/products/product5.png',
-      imageReal: '../../assets/images/estimator/product_02.jpg',
+      image: './assets/images/products/product5.png',
+      imageReal: './assets/images/estimator/product_02.jpg',
       description: '두께 선택: 6T / 9T / 12T',
       link: 'https://brand.naver.com/ddasaroom/products/4200445704'
     },

@@ -21,8 +21,8 @@ const PRODUCT_CONFIGS = {
       { value: '40', label: '40T' }
     ],
     defaultThickness: '25',
-    image: '../../assets/images/products/product2.png',
-    imageReal: '../../assets/images/estimator/product_03.jpg',
+    image: './assets/images/products/product2.png',
+    imageReal: './assets/images/estimator/product_03.jpg',
     link: 'https://brand.naver.com/ddasaroom/products/5994906898',
     showThermalNotice: false
   },
@@ -54,8 +54,8 @@ const PRODUCT_CONFIGS = {
       { value: '22', label: '22T' }
     ],
     defaultThickness: '17',
-    image: '../../assets/images/products/product1.png',
-    imageReal: '../../assets/images/estimator/product_01.jpg',
+    image: './assets/images/products/product1.png',
+    imageReal: './assets/images/estimator/product_01.jpg',
     link: 'https://brand.naver.com/ddasaroom/products/6092903705',
     showThermalNotice: true,
     showRollUnits: false
@@ -87,8 +87,8 @@ const PRODUCT_CONFIGS = {
       { value: '12', label: '12T' }
     ],
     defaultThickness: '9',
-    image: '../../assets/images/products/product5.png',
-    imageReal: '../../assets/images/estimator/product_02.jpg',
+    image: './assets/images/products/product5.png',
+    imageReal: './assets/images/estimator/product_02.jpg',
     link: 'https://brand.naver.com/ddasaroom/products/4200445704',
     showThermalNotice: true,
     showRollUnits: true // 50cm 개수 표시
