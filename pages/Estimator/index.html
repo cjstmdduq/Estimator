@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>따사룸 매트견적 계산기</title>
+    <meta name="description" content="따사룸 셀프시공 견적계산기 - 우리집 셀프시공 견적을 간단한 입력으로 산출해보세요">
+    <link rel="canonical" href="https://www.ddasaroom.com/pages/Estimator/index.html">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://www.ddasaroom.com/pages/Estimator/index.html">
+    <meta property="og:title" content="따사룸 매트견적 계산기">
+    <meta property="og:description" content="우리집 셀프시공 견적이 어려우셨다면? 이제 간단한 입력으로 견적을 산출해보세요">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary">
+    <meta property="twitter:url" content="https://www.ddasaroom.com/pages/Estimator/index.html">
+    <meta property="twitter:title" content="따사룸 매트견적 계산기">
+    <meta property="twitter:description" content="우리집 셀프시공 견적이 어려우셨다면? 이제 간단한 입력으로 견적을 산출해보세요">
+    
+    <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-wrapper">
+      <!-- 네비게이션 -->
+      <nav class="navbar" id="navbar">
+        <div class="nav-container">
+          <div class="nav-logo">
+            <a href="../../index.html">
+              <img src="../../assets/logo/logo_black.png" alt="ddasaroom" class="logo-black">
+            </a>
+          </div>
+        </div>
+      </nav>
+
+      <!-- 메인 컨텐츠 -->
+      <main class="main-content">
+        <!-- 기존 헤더 제거됨 -->
+
+        <div class="layout-wrapper">
+          <!-- 왼쪽: 입력 영역 -->
+          <div class="layout-left">
+            <section class="card">
+              <h2>제품 선택 <span class="step-label">Step 1</span></h2>
+
+              <!-- 따사룸 제품 -->
+              <div class="product-tabs">
+                <div class="product-tab-item">
+                  <button class="product-tab-btn active" data-product="babyRoll">
+                    <div class="product-tab-image" style="background-image: url('../../assets/images/estimator/product_01.jpg')"></div>
+                  </button>
+                  <span class="product-tab-label">유아 롤매트</span>
+                </div>
+                <div class="product-tab-item">
+                  <button class="product-tab-btn" data-product="petRoll">
+                    <div class="product-tab-image" style="background-image: url('../../assets/images/estimator/product_02.jpg')"></div>
+                  </button>
+                  <span class="product-tab-label">애견 롤매트</span>
+                </div>
+                <div class="product-tab-item">
+                  <button class="product-tab-btn" data-product="puzzle">
+                    <div class="product-tab-image" style="background-image: url('../../assets/images/estimator/product_03.jpg')"></div>
+                  </button>
+                  <span class="product-tab-label">퍼즐매트</span>
+                </div>
+              </div>
+
+            </section>
+
+            <section class="card">
+              <h2>두께 선택 <span class="step-label">Step 2</span></h2>
+              <div id="thickness-selector" class="thickness-tabs">
+                <!-- 동적으로 생성됨 -->
+              </div>
+            </section>
+
+
+            <section class="card">
+              <h2>공간 입력 <span class="step-label">Step 3</span></h2>
+
+              <div id="spaces-container"></div>
+
+              <div class="button-group">
+                <button id="add-space" class="secondary">+ 공간 추가</button>
+              </div>
+            </section>
+          </div>
+
+          <!-- 오른쪽: 견적 결과 -->
+          <div class="layout-right">
+            <section class="card">
+              <h2>견적 결과</h2>
+
+              <div class="result">
+                <div style="margin-bottom: 12px;"><strong>총 구성</strong></div>
+                <div id="total-composition" style="margin-left: 20px; margin-bottom: 12px;">-</div>
+                <div style="margin-top: 16px;"><strong>총 수량 및 가격</strong></div>
+                <div id="total-summary" style="margin-left: 20px;">-</div>
+              </div>
+
+              <div class="action-buttons">
+                <button id="copy-estimate" class="action-btn secondary-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  견적 복사
+                </button>
+                <a id="purchase-link" href="#" target="_blank" class="action-btn primary-btn">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="9" cy="21" r="1"></circle>
+                    <circle cx="20" cy="21" r="1"></circle>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+                  </svg>
+                  제품 구매하기
+                </a>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="./js/constants.js"></script>
+    <script src="./js/product-config.js"></script>
+    <script src="./js/prices.js"></script>
+    <script src="./js/utils.js"></script>
+    <script src="./js/calculations.js"></script>
+    <script src="./js/visualization.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

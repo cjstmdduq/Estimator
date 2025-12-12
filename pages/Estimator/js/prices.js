@@ -18,10 +18,7 @@ const ROLL_PRICES = {
   22: { 110: 19100, 120: 20900, 125: 20900 }
 };
 
-// 리포소홈 롤매트 가격 정보 (50cm 기준, 두께별/폭별)
-const LIPOSOHOME_ROLL_PRICES = {
-  17: { 80: 10900, 90: 11900, 100: 12900, 110: 13900, 120: 15400, 130: 16400, 135: 17900 }
-};
+
 
 // 롤매트 폭 우선순위
 const ROLL_WIDTH_PRIORITY = {
@@ -32,16 +29,7 @@ const ROLL_WIDTH_PRIORITY = {
   140: 1   // 높은 우선순위
 };
 
-// 리포소홈 롤매트 폭 우선순위
-const LIPOSOHOME_ROLL_WIDTH_PRIORITY = {
-  80: 2,   // 다음 우선순위
-  90: 2,   // 다음 우선순위
-  100: 1,  // 높은 우선순위
-  110: 1,  // 높은 우선순위
-  120: 1,  // 높은 우선순위
-  130: 1,  // 높은 우선순위
-  135: 2   // 다음 우선순위
-};
+
 
 // 롤매트 두께별 최대 길이 (cm)
 const ROLL_MAX_LENGTH = {
@@ -53,10 +41,7 @@ const ROLL_MAX_LENGTH = {
   22: 600    // 6m
 };
 
-// 리포소홈 롤매트 두께별 최대 길이 (cm)
-const LIPOSOHOME_ROLL_MAX_LENGTH = {
-  17: 700   // 7m
-};
+
 
 // ========== 헬퍼 함수 (리팩토링 버전) ==========
 
@@ -69,9 +54,6 @@ function getRollWidthPriority(width, thickness, productType) {
     return getWidthPriority(productType, width);
   }
 
-  // 폴백: 기존 로직
-  if (productType === 'riposoRoll') {
-    return LIPOSOHOME_ROLL_WIDTH_PRIORITY[width] ?? 2;
-  }
+
   return ROLL_WIDTH_PRIORITY[width] ?? 2;
 }
