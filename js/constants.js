@@ -10,7 +10,7 @@ const LENGTH_RELAXATION_THRESHOLD_CM = 20;
 // 보완 옵션 임계치(부족폭 cm 이상이면 추가 롤 제안)
 const COMPLEMENT_GAP_THRESHOLD_CM = 15;
 // 보완 시 선호 폭 순서 (사용 가능 폭과 교집합 적용)
-const PREFERRED_COMPLEMENT_WIDTHS = [110, 125, 140, 70];
+const PREFERRED_COMPLEMENT_WIDTHS = [110, 140, 70];
 
 // 고객 선호 폭 선택 규칙 (폭 기준, cm)
 const PREFERRED_WIDTH_RULES = [

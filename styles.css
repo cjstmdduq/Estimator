@@ -488,8 +488,8 @@ button {
 .space-visual-wrapper {
   margin: 0;
   flex: 0 0 auto;
-  min-width: 350px;
-  max-width: 450px;
+  width: 600px;
+  height: 600px;
 }
 
 /* 반응형: 작은 화면에서는 세로 배치 */
@@ -499,8 +499,9 @@ button {
   }
   
   .space-visual-wrapper {
-    max-width: 100%;
     width: 100%;
+    max-width: 600px;
+    height: 600px;
   }
 }
 

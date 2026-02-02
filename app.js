@@ -339,7 +339,7 @@
         totalCompositionHTML += `</div>`; // space-composition-text 닫기
 
         // 시각화 영역 placeholder
-        totalCompositionHTML += `<div class="space-visual-placeholder" data-space-index="${r.index}" style="flex: 0 0 auto; min-width: 350px; max-width: 450px;"></div>`;
+        totalCompositionHTML += `<div class="space-visual-placeholder" data-space-index="${r.index}" style="flex: 0 0 auto; width: 600px; height: 600px;"></div>`;
         
         totalCompositionHTML += `</div>`; // space-composition-item 닫기
       });
@@ -601,6 +601,8 @@
     if (showThermalNotice) {
       text += '온도 변화에 따른 수축을 고려해, 폭·길이 모두 여유 있게 출고됩니다.\n';
     }
+
+    text += '본 견적은 참고용이며, 실제 시공 환경에 따라 달라질 수 있습니다.\n';
 
     return text;
   }
